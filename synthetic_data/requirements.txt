@@ -1,0 +1,6 @@
+# Synthetic document generator (generate_documents.py). Exact pins, the same
+# supply-chain stance as the apps (see agent_app/requirements.txt): an update
+# is a reviewed change to this file.
+databricks-sdk==0.138.0   # Apache-2.0 — Foundation Model API calls
+faker==40.39.0            # MIT — fictional people, clinics, addresses
+reportlab==5.0.1          # BSD — PDF layout

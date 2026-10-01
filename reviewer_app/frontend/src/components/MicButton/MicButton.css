@@ -1,0 +1,46 @@
+/* Mic button — mirrors .chat-interface__send geometry (36px circle). */
+.chat-mic {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: oklch(0.88 0.005 80);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.chat-mic:hover:not(:disabled) {
+  background: oklch(0.82 0.01 80);
+  color: var(--text-primary);
+}
+
+.chat-mic:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+/* Recording — solid red with a soft pulse. */
+.chat-mic--recording {
+  background: oklch(0.55 0.19 25);
+  color: #fff;
+  animation: chat-mic-pulse 1.4s ease-in-out infinite;
+}
+
+.chat-mic--recording:hover:not(:disabled) {
+  background: oklch(0.50 0.20 25);
+  color: #fff;
+}
+
+@keyframes chat-mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 oklch(0.55 0.19 25 / 0.45); }
+  50% { box-shadow: 0 0 0 6px oklch(0.55 0.19 25 / 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-mic--recording { animation: none; }
+}

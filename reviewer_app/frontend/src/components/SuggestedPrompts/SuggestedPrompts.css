@@ -1,0 +1,72 @@
+/* Claude.ai-style suggested prompts — 2x2 grid, minimal */
+
+.suggested-prompts {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 2rem;
+  gap: 2.5rem;
+}
+
+.suggested-prompts__header {
+  text-align: center;
+}
+
+.suggested-prompts__greeting {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin: 0 0 0.25rem 0;
+  letter-spacing: -0.01em;
+}
+
+.suggested-prompts__title {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.suggested-prompts__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.625rem;
+  max-width: 640px;
+  width: 100%;
+}
+
+.suggested-prompts__card {
+  display: flex;
+  align-items: center;
+  padding: 0.875rem 1rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: left;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  transition: border-color 0.15s ease, background 0.15s ease;
+  line-height: 1.4;
+}
+
+.suggested-prompts__card:hover {
+  border-color: var(--border-strong);
+  background: var(--neutral-100);
+}
+
+.suggested-prompts__text {
+  flex: 1;
+}
+
+@media (max-width: 520px) {
+  .suggested-prompts__grid {
+    grid-template-columns: 1fr;
+  }
+}

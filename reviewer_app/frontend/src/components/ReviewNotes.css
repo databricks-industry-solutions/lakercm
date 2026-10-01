@@ -1,0 +1,200 @@
+/* Reviewer notes — right half of the bottom review section.
+
+   Sits beside the verdict rather than under it, because the two are written
+   together: the note is the justification for the verdict, and a reviewer should
+   not have to scroll away from one to write the other. */
+
+.rn-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--color-surface, #fff);
+}
+
+.rn-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  border-bottom: 1px solid var(--color-border, #e7e5e4);
+  flex: 0 0 auto;
+}
+
+.rn-title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--color-text, #1c1917);
+}
+
+.rn-scope {
+  font-size: 0.6875rem;
+  color: var(--color-text-muted, #78716c);
+}
+
+.rn-head-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  margin-left: auto;
+}
+
+/* Reserves its own line height so the row does not reflow as the text appears
+   and disappears on every keystroke. */
+.rn-status {
+  min-width: 4.5rem;
+  font-size: 0.6875rem;
+  text-align: right;
+  color: var(--color-text-muted, #78716c);
+  transition: color 120ms ease-out;
+}
+
+.rn-status--saved {
+  color: var(--success-fg, #067647);
+}
+
+.rn-status--error {
+  color: var(--danger-fg, #b42318);
+  min-width: 12rem;
+}
+
+.rn-toggle {
+  display: inline-flex;
+  border: 1px solid var(--color-border, #e7e5e4);
+  border-radius: var(--radius-sm, 4px);
+  overflow: hidden;
+}
+
+.rn-toggle-btn {
+  padding: 3px var(--space-2, 8px);
+  border: 0;
+  background: var(--surface-raised, #fff);
+  color: var(--color-text-muted, #78716c);
+  font: inherit;
+  font-size: 0.6875rem;
+  cursor: pointer;
+}
+
+.rn-toggle-btn + .rn-toggle-btn {
+  border-left: 1px solid var(--color-border, #e7e5e4);
+}
+
+.rn-toggle-btn:hover:not(:disabled) {
+  background: var(--neutral-50, #f9fafb);
+  color: var(--color-text, #1c1917);
+}
+
+.rn-toggle-btn.is-active {
+  background: var(--accent, #2563eb);
+  border-color: var(--accent, #2563eb);
+  color: #fff;
+}
+
+.rn-toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* min-height: 0 on a flex child is what lets the textarea actually shrink inside
+   the resizable review panel instead of forcing it taller than its container. */
+.rn-textarea {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--color-text, #1c1917);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.rn-textarea::placeholder {
+  color: var(--color-text-subtle, #a8a29e);
+}
+
+.rn-textarea:focus-visible {
+  box-shadow: inset 2px 0 0 var(--accent, #2563eb);
+}
+
+.rn-preview {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--color-text, #1c1917);
+}
+
+.rn-preview > :first-child {
+  margin-top: 0;
+}
+
+.rn-preview > :last-child {
+  margin-bottom: 0;
+}
+
+.rn-preview h1,
+.rn-preview h2,
+.rn-preview h3 {
+  margin: var(--space-3, 12px) 0 var(--space-2, 8px);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.rn-preview ul,
+.rn-preview ol {
+  margin: var(--space-2, 8px) 0;
+  padding-left: 1.25rem;
+}
+
+.rn-preview code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--neutral-100, #f5f5f4);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.78125rem;
+}
+
+.rn-preview pre {
+  padding: var(--space-2, 8px);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--neutral-100, #f5f5f4);
+  overflow-x: auto;
+}
+
+.rn-preview pre code {
+  padding: 0;
+  background: none;
+}
+
+.rn-preview table {
+  border-collapse: collapse;
+  margin: var(--space-2, 8px) 0;
+  font-size: 0.78125rem;
+}
+
+.rn-preview th,
+.rn-preview td {
+  padding: 3px var(--space-2, 8px);
+  border: 1px solid var(--color-border, #e7e5e4);
+  text-align: left;
+}
+
+.rn-preview blockquote {
+  margin: var(--space-2, 8px) 0;
+  padding-left: var(--space-3, 12px);
+  border-left: 2px solid var(--color-border, #e7e5e4);
+  color: var(--color-text-muted, #57534e);
+}
+
+.rn-preview a {
+  color: var(--accent, #2563eb);
+}

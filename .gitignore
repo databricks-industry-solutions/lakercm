@@ -1,27 +1,62 @@
-# Databricks Asset Bundle files
-.databricks/
-
-# IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS files
-.DS_Store
-Thumbs.db
-
 # Python
 __pycache__/
 *.py[cod]
 *$py.class
 *.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# Node / Vite
+node_modules/
 dist/
+*.log
+
+# Fetched external source, pinned by SHA and never committed (Databricks License).
+# scripts/fetch_ontobricks_source.py materializes OntoBricks here for the
+# ontobricks bundle's app; source of truth is bundles/ontobricks/ontobricks.lock.json.
 build/
 
-# Jupyter Notebook checkpoints
-.ipynb_checkpoints/
+# Databricks / MLflow runtime artifacts
+.databricks/
+mlflow.db
+*.sqlite
+*.sqlite3
 
-# Environment files
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local env files
 .env
-.env.local 
+.env.local
+
+# app.yaml files are minimal static committed configs now — env/command
+# live in the bundle app resources (bundles/apps/resources/*.yml) and ride
+# each deployment. Nothing app.yaml-related is generated anymore.
+
+# Local Claude Code project state (per-machine)
+.claude/
+
+# Working plans and handoff notes. They stay on the machine that wrote them;
+# anything a reader of the repo needs belongs in docs/ proper.
+docs/plans/
+plans/
+
+# Load test result artifacts (regenerated per run; not source)
+scripts/load_test/results/
+
+# Rendered Genie space JSON (genie_render pre-step output; source of truth is
+# scripts/genie_space_content.py)
+bundles/genie/*.geniespace.json
+# Rendered ontology sidecar (Domains & Pages; source is scripts/ontology_content.py)
+bundles/genie/*.ontology.json
+
+# Coding-agent local state (per-machine)
+.pi/
+.isaac/

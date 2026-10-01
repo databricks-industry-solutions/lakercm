@@ -1,0 +1,770 @@
+.admin-page {
+  min-height: calc(100vh - var(--header-height, 72px));
+  padding: 2.5rem 1.5rem 4rem;
+  background: var(--surface, oklch(0.985 0.003 80));
+}
+
+.admin-container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.admin-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.admin-title {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 1.85rem;
+  font-weight: 600;
+  color: var(--text-primary, oklch(0.22 0.01 80));
+  margin: 0 0 0.25rem;
+  letter-spacing: -0.01em;
+}
+
+.admin-subtitle {
+  font-size: 0.9rem;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+  margin: 0;
+}
+
+.admin-refresh {
+  font-size: 0.78rem;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+}
+
+.admin-loading,
+.admin-empty {
+  padding: 1rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+}
+
+.admin-denied {
+  text-align: center;
+  padding: 4rem 1rem;
+}
+
+.admin-denied h1 {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: var(--text-primary, oklch(0.22 0.01 80));
+}
+
+.admin-denied p {
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+  margin: 0 0 1.25rem;
+}
+
+.admin-link {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  background: var(--accent, oklch(0.55 0.12 195));
+  color: white;
+  text-decoration: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.admin-card {
+  background: var(--surface-raised, oklch(0.995 0.003 80));
+  border: 1px solid var(--border, oklch(0.92 0.005 80));
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem 1.5rem;
+}
+
+.admin-card-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border, oklch(0.92 0.005 80));
+  padding-bottom: 0.75rem;
+}
+
+.admin-card-header h2 {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-primary, oklch(0.22 0.01 80));
+}
+
+.admin-card-meta {
+  font-size: 0.78rem;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+}
+
+.admin-error {
+  margin-left: 0.5rem;
+  color: var(--pill-danger-fg);
+  font-size: 0.78rem;
+}
+
+/* Pills */
+.pill {
+  display: inline-block;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.pill-ok {
+  background: var(--pill-ok-bg);
+  color: var(--pill-ok-fg);
+}
+
+.pill-warn {
+  background: var(--pill-warn-bg);
+  color: var(--pill-warn-fg);
+}
+
+.pill-idle {
+  background: var(--pill-idle-bg);
+  color: var(--pill-idle-fg);
+}
+
+/* Instance state */
+.instance-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.instance-state {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.instance-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.85rem 1.5rem;
+  margin: 0;
+}
+
+.instance-fields div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.instance-fields div.wide {
+  grid-column: 1 / -1;
+}
+
+.instance-fields dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+  margin: 0;
+}
+
+.instance-fields dd {
+  font-size: 0.875rem;
+  color: var(--text-primary, oklch(0.22 0.01 80));
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+@media (max-width: 720px) {
+  .instance-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .instance-fields div.wide {
+    grid-column: auto;
+  }
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+}
+
+.small {
+  font-size: 0.78rem;
+}
+
+/* Events table */
+.events-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.events-table th {
+  text-align: left;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+  font-weight: 600;
+  padding: 0.5rem 0.5rem 0.5rem 0;
+  border-bottom: 1px solid var(--border, oklch(0.92 0.005 80));
+}
+
+.events-table td {
+  padding: 0.6rem 0.5rem 0.6rem 0;
+  border-bottom: 1px solid var(--border, oklch(0.92 0.005 80));
+  color: var(--text-primary, oklch(0.22 0.01 80));
+}
+
+.events-table tr:last-child td {
+  border-bottom: none;
+}
+
+.state-mini {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  background: var(--neutral-100);
+  border-radius: 4px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  color: var(--text-primary, oklch(0.22 0.01 80));
+}
+
+.state-arrow {
+  margin: 0 0.4rem;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+}
+
+/* Live metrics */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.85rem;
+}
+
+.metric-tile {
+  background: var(--surface, oklch(0.985 0.003 80));
+  border: 1px solid var(--border, oklch(0.92 0.005 80));
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.metric-tile-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.metric-tile-title {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+  font-weight: 600;
+}
+
+.metric-tile-value {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 1.45rem;
+  font-weight: 600;
+  color: var(--text-primary, oklch(0.22 0.01 80));
+  letter-spacing: -0.01em;
+}
+
+.metric-tile-unit {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+}
+
+.sparkline {
+  stroke: var(--accent, oklch(0.55 0.12 195));
+  opacity: 0.85;
+}
+
+.sparkline-empty {
+  font-size: 0.7rem;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+}
+
+/* Health */
+.health-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.health-row {
+  display: grid;
+  grid-template-columns: 14px 180px auto 1fr;
+  gap: 0.7rem;
+  align-items: center;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--border, oklch(0.92 0.005 80));
+  font-size: 0.875rem;
+}
+
+.health-row:last-child {
+  border-bottom: none;
+}
+
+.health-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.health-dot.ok {
+  background: var(--success-500, #22c55e);
+}
+
+.health-dot.fail {
+  background: var(--error-500, oklch(0.55 0.18 25));
+}
+
+.health-name {
+  font-weight: 500;
+  color: var(--text-primary, oklch(0.22 0.01 80));
+}
+
+.health-latency {
+  font-family: ui-monospace, monospace;
+  font-size: 0.78rem;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+}
+
+.health-detail {
+  font-size: 0.78rem;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+}
+
+
+/* ─── Round 4: header controls + new sections ─────────────────────────── */
+
+.admin-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.admin-control-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.admin-control-toggle input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.admin-control-interval {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.8rem;
+  padding: 5px 8px;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.admin-control-interval:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.admin-control-btn {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 5px 12px;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.admin-control-btn:hover {
+  background: var(--neutral-100);
+  border-color: var(--border-strong);
+}
+
+.admin-section-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  background: var(--pill-danger-bg, oklch(0.95 0.06 25));
+  color: var(--pill-danger-fg, oklch(0.45 0.18 25));
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
+.admin-retry {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  background: transparent;
+  color: inherit;
+  border: 1px solid currentColor;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.admin-unavailable {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--neutral-100);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 6px;
+  font-size: 0.83rem;
+  color: var(--text-secondary);
+}
+
+.admin-unavailable-icon {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* Connection bar */
+.conn-bar-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.conn-bar {
+  display: flex;
+  width: 100%;
+  height: 14px;
+  background: var(--neutral-100);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.conn-seg {
+  display: block;
+  height: 100%;
+  transition: width 0.25s ease;
+}
+
+.conn-active {
+  background: var(--accent);
+}
+
+.conn-idle {
+  background: var(--text-muted);
+  opacity: 0.55;
+}
+
+.conn-idle-tx {
+  background: var(--pill-warn-fg, oklch(0.42 0.14 65));
+  opacity: 0.8;
+}
+
+.conn-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  align-items: center;
+}
+
+.conn-legend i.conn-dot,
+.conn-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  margin-right: 0.35rem;
+  vertical-align: middle;
+}
+
+.conn-util-high {
+  color: var(--pill-danger-fg, oklch(0.55 0.18 25));
+  font-weight: 600;
+}
+
+/* Generic admin tables */
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.admin-table th {
+  text-align: left;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  font-weight: 600;
+  padding: 0.5rem 0.5rem 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.admin-table td {
+  padding: 0.55rem 0.5rem 0.55rem 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  vertical-align: top;
+}
+
+.admin-table tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-table .row-warn {
+  background: var(--pill-warn-bg, oklch(0.95 0.06 70));
+}
+
+.admin-table .row-warn td {
+  color: var(--pill-warn-fg, oklch(0.42 0.14 65));
+}
+
+.admin-table .row-danger {
+  background: var(--pill-danger-bg, oklch(0.95 0.06 25));
+}
+
+.admin-table .row-danger td {
+  color: var(--pill-danger-fg, oklch(0.55 0.18 25));
+}
+
+.admin-table .query-cell {
+  max-width: 460px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.admin-table .query-cell:hover {
+  white-space: normal;
+  word-break: break-word;
+  color: var(--text-primary);
+}
+
+/* Range picker (Cold-start history 1h / 24h / 7d) */
+.admin-range-picker {
+  display: inline-flex;
+  margin-left: 0.75rem;
+  gap: 2px;
+}
+
+.admin-range-picker button {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 3px 9px;
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.admin-range-picker button:hover {
+  background: var(--neutral-100);
+  color: var(--text-primary);
+}
+
+.admin-range-picker button.active {
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Metric tile hint line */
+.metric-tile-hint {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-family: ui-monospace, monospace;
+}
+
+/* Runtime field grid (under Component health) */
+.runtime-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.7rem 1.5rem;
+  margin: 1rem 0 0;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--border);
+}
+
+.runtime-fields div {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.runtime-fields dt {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.runtime-fields dd {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .admin-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .admin-controls {
+    width: 100%;
+  }
+  .admin-table .query-cell {
+    max-width: 220px;
+  }
+}
+
+/* ─── Round 5 additions ──────────────────────────────────────────────── */
+
+.admin-controls-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+}
+
+.admin-inline-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.admin-precision {
+  margin-left: 0.5rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+}
+
+/* Connections — longest idle-in-tx detail row */
+.conn-detail {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+}
+
+.conn-detail-label {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.conn-detail-value {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Dimmed rows: idle pool sessions / Databricks-managed tables shown
+   alongside foreground rows but visually de-emphasized. */
+.admin-table tr.row-dimmed td {
+  opacity: 0.55;
+}
+
+.admin-table tr.row-dimmed:hover td {
+  opacity: 1;
+}
+
+/* Row tags (primary / unique / unused / managed) */
+.row-tag {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  background: var(--neutral-100);
+  color: var(--text-secondary);
+}
+
+.row-tag.warn {
+  background: var(--pill-warn-bg);
+  color: var(--pill-warn-fg);
+}
+
+/* Slow-queries unavailable expanded block */
+.admin-unavailable-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.admin-unavailable-howto {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  padding-left: 1.5rem;
+  line-height: 1.45;
+}
+
+.admin-unavailable-howto code {
+  background: var(--neutral-100);
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.74rem;
+  color: var(--text-primary);
+}
+
+/* Indexes table */
+.indexes-table th,
+.indexes-table td {
+  white-space: nowrap;
+}

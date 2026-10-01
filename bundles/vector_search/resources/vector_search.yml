@@ -1,0 +1,11 @@
+# =============================================================================
+# Vector Search resources — NOT managed as terraform resources.
+# =============================================================================
+# The payer-policy endpoint + index are created by the deploy orchestrator's
+# post-deploy hook (scripts/deploy_all.py -> bundle_registry:
+# vector_search.post += vector_index -> scripts/create_vector_index.py), which
+# is idempotent (skip-if-exists, else re-sync) and best-effort (a workspace
+# without Vector Search warns instead of failing the deploy; the agent tool
+# degrades gracefully). Same pattern as the semantic/governance layers and the
+# Lakebase runtime steps — this bundle deploys zero resources but owns the step.
+resources: {}

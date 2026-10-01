@@ -1,0 +1,377 @@
+.settings-page {
+  min-height: calc(100vh - var(--header-height, 72px));
+  padding: 2.5rem 1.5rem 4rem;
+  background: var(--surface, oklch(0.985 0.003 80));
+}
+
+.settings-container {
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.settings-page-header {
+  margin-bottom: 2rem;
+}
+
+.settings-title {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 1.85rem;
+  font-weight: 600;
+  color: var(--text-primary, oklch(0.22 0.01 80));
+  letter-spacing: -0.01em;
+  margin: 0 0 0.35rem;
+}
+
+.settings-subtitle {
+  font-size: 0.9rem;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+  margin: 0;
+}
+
+.settings-shell {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.settings-rail {
+  background: var(--surface-raised, oklch(0.995 0.003 80));
+  border: 1px solid var(--border, oklch(0.92 0.005 80));
+  border-radius: 12px;
+  padding: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  position: sticky;
+  top: calc(var(--header-height, 72px) + 1rem);
+}
+
+.settings-rail-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 0.65rem 0.9rem 0.65rem 1.1rem;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+  text-align: left;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.settings-rail-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 25%;
+  bottom: 25%;
+  width: 3px;
+  border-radius: 2px;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.settings-rail-item:hover {
+  background: var(--accent-subtle, oklch(0.55 0.12 195 / 0.06));
+  color: var(--text-primary, oklch(0.22 0.01 80));
+}
+
+.settings-rail-item.active {
+  background: var(--accent-subtle, oklch(0.55 0.12 195 / 0.1));
+  color: var(--accent, oklch(0.55 0.12 195));
+  font-weight: 600;
+}
+
+.settings-rail-item.active::before {
+  background: var(--accent, oklch(0.55 0.12 195));
+}
+
+.settings-pane {
+  background: var(--surface-raised, oklch(0.995 0.003 80));
+  border: 1px solid var(--border, oklch(0.92 0.005 80));
+  border-radius: 12px;
+  padding: 2rem 2.25rem 2.25rem;
+}
+
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.settings-section-header {
+  border-bottom: 1px solid var(--border, oklch(0.92 0.005 80));
+  padding-bottom: 1rem;
+}
+
+.settings-section-title {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-primary, oklch(0.22 0.01 80));
+  margin: 0 0 0.25rem;
+  letter-spacing: -0.005em;
+}
+
+.settings-section-subtitle {
+  font-size: 0.85rem;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+  margin: 0;
+}
+
+/* Profile -------------------------------------------------------------- */
+
+.settings-identity {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.settings-identity-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--accent, oklch(0.55 0.12 195));
+  color: white;
+  font-size: 1.4rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.settings-identity-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary, oklch(0.22 0.01 80));
+}
+
+.settings-identity-email {
+  font-size: 0.85rem;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+  margin-top: 2px;
+}
+
+.settings-fields {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border, oklch(0.92 0.005 80));
+}
+
+.settings-field {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 1rem;
+  padding: 0.85rem 0;
+  border-bottom: 1px solid var(--border, oklch(0.92 0.005 80));
+}
+
+.settings-field dt {
+  font-size: 0.875rem;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+  margin: 0;
+}
+
+.settings-field dd {
+  font-size: 0.875rem;
+  color: var(--text-primary, oklch(0.22 0.01 80));
+  margin: 0;
+}
+
+.settings-pill {
+  display: inline-block;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  background: var(--neutral-100);
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.settings-pill.admin {
+  background: var(--accent-subtle, oklch(0.55 0.12 195 / 0.12));
+  color: var(--accent, oklch(0.55 0.12 195));
+}
+
+.settings-info-banner {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  padding: 0.7rem 0.9rem;
+  background: var(--neutral-100);
+  border-left: 3px solid var(--border, oklch(0.92 0.005 80));
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+}
+
+.settings-info-banner svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+}
+
+/* Display -------------------------------------------------------------- */
+
+.settings-control {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.settings-control-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary, oklch(0.22 0.01 80));
+}
+
+.theme-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+.theme-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 1rem;
+  background: var(--surface, oklch(0.985 0.003 80));
+  border: 1px solid var(--border, oklch(0.92 0.005 80));
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease,
+    transform 0.15s ease;
+  font-family: system-ui, -apple-system, sans-serif;
+  text-align: left;
+  min-height: 110px;
+}
+
+.theme-card:hover {
+  border-color: oklch(0.85 0.005 80);
+  background: var(--surface-raised, oklch(0.995 0.003 80));
+}
+
+.theme-card.selected {
+  border-color: var(--accent, oklch(0.55 0.12 195));
+  background: var(--accent-subtle, oklch(0.55 0.12 195 / 0.06));
+  box-shadow: 0 0 0 1px var(--accent, oklch(0.55 0.12 195));
+}
+
+.theme-card-icon {
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+  display: flex;
+  align-items: center;
+}
+
+.theme-card.selected .theme-card-icon {
+  color: var(--accent, oklch(0.55 0.12 195));
+}
+
+.theme-card-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary, oklch(0.22 0.01 80));
+}
+
+.theme-card-desc {
+  font-size: 0.78rem;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+}
+
+.theme-card-check {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent, oklch(0.55 0.12 195));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.density-options {
+  display: flex;
+  gap: 1rem;
+}
+
+.density-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.85rem 1rem;
+  background: var(--surface, oklch(0.985 0.003 80));
+  border: 1px solid var(--border, oklch(0.92 0.005 80));
+  border-radius: 10px;
+  cursor: pointer;
+  flex: 1;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.density-option:hover {
+  border-color: oklch(0.85 0.005 80);
+}
+
+.density-option.selected {
+  border-color: var(--accent, oklch(0.55 0.12 195));
+  background: var(--accent-subtle, oklch(0.55 0.12 195 / 0.06));
+}
+
+.density-option input[type='radio'] {
+  margin-top: 3px;
+  accent-color: var(--accent, oklch(0.55 0.12 195));
+}
+
+.density-option-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary, oklch(0.22 0.01 80));
+}
+
+.density-option-desc {
+  font-size: 0.78rem;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+}
+
+.settings-footnote {
+  font-size: 0.75rem;
+  color: var(--text-secondary, oklch(0.55 0.01 80));
+}
+
+@media (max-width: 800px) {
+  .settings-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-rail {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+  }
+
+  .settings-pane {
+    padding: 1.5rem 1.25rem;
+  }
+
+  .theme-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .density-options {
+    flex-direction: column;
+  }
+}

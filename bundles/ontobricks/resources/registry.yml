@@ -1,0 +1,65 @@
+# =============================================================================
+# OntoBricks registry storage — the UC half of the registry
+# =============================================================================
+# OntoBricks keeps its registry in two places: the structured half in Lakebase
+# (bound as the `ontobricks-registry-db` app resource in ontobricks_app.yml) and
+# the binary/materialised half in Unity Catalog — ontology binaries in a volume,
+# and one Delta triplestore table per built domain version
+# (triplestore_<domain>_V<n>).
+#
+# Both are declared HERE, as bundle resources, rather than created by the
+# registry's own initialise call. Two reasons:
+#
+#   * Ordering. `bundle deploy` creates every resource before any post-step
+#     runs, so the schema and volume are guaranteed to exist by the time
+#     scripts/bootstrap_ontobricks.py initialises the registry. Created the
+#     other way round, initialise reports "could not create binary volume" and
+#     the registry comes up half-configured — which is exactly what happened
+#     the first time this was brought up by hand.
+#   * Governance. The schema's grants are reviewable in source, and the
+#     deployer owns it, instead of ownership landing wherever the first
+#     successful CREATE happened to come from.
+#
+# The app SP's own privileges are NOT granted here: it does not exist until the
+# app is created, and an app's service_principal_client_id is a read-only API
+# output with no bundle-schema field to reference. bootstrap_ontobricks.py
+# grants it USE_SCHEMA/CREATE_TABLE/SELECT/MODIFY/READ_VOLUME/WRITE_VOLUME on
+# this schema and asserts it holds nothing wider than USE_CATALOG on the catalog.
+# =============================================================================
+
+resources:
+  schemas:
+    ontobricks_registry_schema:
+      name: ${var.ontobricks_registry_schema}
+      catalog_name: ${var.catalog}
+      comment: "OntoBricks registry for the LakeRCM knowledge graph: ontology binaries and per-version Delta triplestores"
+      properties:
+        environment: ${bundle.target}
+        project: lakercm
+        managed_by: databricks_asset_bundle
+      grants:
+        - principal: ${var.user_email}
+          privileges:
+            - ALL_PRIVILEGES
+        # The agent reads the graph directly (agent/tools.py
+        # traverse_claims_graph SELECTs triplestore_lakercm_v1 on the warehouse).
+        # The reviewer SP is granted ahead of its own KG panel: the grant is
+        # correct and harmless today, but the reviewer app has NO KG surface yet
+        # -- an earlier version of this comment claimed a "KG tab" that was never
+        # built, so do not treat this grant as evidence one exists.
+        - principal: ${var.reviewer_sp_client_id}
+          privileges:
+            - USE_SCHEMA
+            - SELECT
+        - principal: ${var.agent_sp_client_id}
+          privileges:
+            - USE_SCHEMA
+            - SELECT
+
+  volumes:
+    ontobricks_registry_volume:
+      name: ${var.ontobricks_registry_volume}
+      catalog_name: ${var.catalog}
+      schema_name: ${resources.schemas.ontobricks_registry_schema.name}
+      volume_type: MANAGED
+      comment: "OntoBricks ontology binaries (registry blob storage)"

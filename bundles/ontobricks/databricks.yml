@@ -1,0 +1,45 @@
+# =============================================================================
+# LakeRCM — OntoBricks bundle (dev-only)
+# =============================================================================
+# One Databricks App running OntoBricks (Databricks Labs) unmodified: its
+# UI/REST/GraphQL AND its MCP server, mounted at /mcp in the same process by
+# bundles/ontobricks/app/combined_app.py (OntoBricks' built-in "mounted" mode).
+#
+# The OntoBricks source is NOT committed (Databricks License). It is fetched at
+# a pinned SHA (ontobricks.lock.json) into the gitignored build/ontobricks/ by
+# scripts/fetch_ontobricks_source.py — the `ontobricks_source` pre-step, and a
+# CI step before `bundle validate` (see .github/workflows/ci.yml). The app's
+# source_code_path points into that fetched tree; sync force-includes it.
+#
+# Deploys on the CLI's default direct engine (like the apps bundle); deploy_all
+# requires CLI >= 1.15.0. Deployed only to `dev` for now (bundle_registry).
+# =============================================================================
+
+bundle:
+  name: lakercm-ontobricks
+
+include:
+  - ../_shared/variables.yml
+  - ../_shared/targets.yml
+  - resources/*.yml
+
+variables:
+  # Local lookup (the CLI eagerly resolves every declared lookup, so it lives
+  # HERE, not in _shared/variables.yml). OntoBricks builds run mappings + COPY
+  # + materialization, so it uses the STANDARD warehouse, never the read-only
+  # Reyden (Lakehouse//RT) one.
+  ontobricks_app_warehouse_id:
+    description: "ID of the standard SQL warehouse OntoBricks builds on (resolved by name)."
+    lookup:
+      warehouse: ${var.app_warehouse_name}
+
+sync:
+  # Repo root, like the apps bundle, so the fetched (gitignored) tree is in sync
+  # scope and the app's ../../../build/ontobricks source_code_path resolves. The
+  # build/ontobricks/** include force-includes the gitignored fetched source
+  # (the "does not match any files" validate warning is benign — the same one
+  # the apps bundle emits for its gitignored reviewer_app/frontend/dist/**).
+  paths:
+    - ../..
+  include:
+    - ../../build/ontobricks/**

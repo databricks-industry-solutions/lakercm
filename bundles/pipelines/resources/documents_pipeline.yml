@@ -1,0 +1,105 @@
+# =============================================================================
+# SDP Pipeline Resources - Medical Documents
+# =============================================================================
+# Lakeflow Declarative Pipeline for document parsing and extraction.
+# Bronze (ai_parse_document via Auto Loader on documents_input volume)
+#   → Silver (ai_classify, ai_extract, ai_prep_search)
+#     → Gold (gold_extraction_labels, synced CONTINUOUSLY to Lakebase).
+#
+# silver_doc_chunks is the odd one out: a third parallel branch off bronze that
+# terminates in Lakebase (public.document_chunks) rather than in gold, feeding
+# the agent's hybrid document search.
+#
+# Mode: triggered. Kicked by lakercm_documents_refresh (jobs bundle, on a
+# file-arrival trigger on the input volume) and by the reviewer app on every
+# /api/documents/upload.
+# =============================================================================
+
+resources:
+  pipelines:
+    medical_documents_pipeline:
+      name: ${var.medical_documents_pipeline_name}
+      catalog: ${var.catalog}
+      target: ${var.lakercm_schema}
+      serverless: true
+      edition: ADVANCED
+      channel: CURRENT
+      photon: true
+      event_log:
+        catalog: ${var.catalog}
+        schema: ${var.lakercm_schema}
+        name: documents_pipeline_events
+
+      libraries:
+        - file:
+            path: ../../../pipelines/bronze/bronze_doc_parsed.sql
+        - file:
+            path: ../../../pipelines/silver/silver_classify_label.sql
+        - file:
+            path: ../../../pipelines/silver/silver_extract_identifiers.sql
+        - file:
+            path: ../../../pipelines/silver/silver_validate_codes.sql
+        - file:
+            path: ../../../pipelines/silver/silver_uncaptured_codes.sql
+        # Third parallel branch off bronze. Does not feed gold — its consumer is
+        # the load_chunks task (jobs bundle), which embeds into Lakebase.
+        - file:
+            path: ../../../pipelines/silver/silver_doc_chunks.sql
+        - file:
+            path: ../../../pipelines/gold/gold_extraction_labels.sql
+        - file:
+            path: ../../../pipelines/gold/gold_claim_codes.sql
+
+      configuration:
+        pipelines.environmentVersion: "4"
+        documents_input_volume_path: ${var.documents_input_volume_path}
+        documents_page_images_path: ${var.documents_page_images_path}
+        auto_verdict_threshold: ${var.auto_verdict_threshold}
+        # Ceiling gold_extraction_labels rescales ai_classify's confidence against
+        # before blending it. Required here, not optional: the pipeline fails
+        # ANALYSIS on an undefined ${...}, and test_every_config_reference_is_defined
+        # fails the PR before it gets that far.
+        classify_confidence_ceiling: ${var.classify_confidence_ceiling}
+        # Fully-qualify the code-set reference tables (external UC tables seeded
+        # by the reference_data bundle) that silver_validate_codes joins against.
+        ref_catalog: ${var.catalog}
+        ref_schema: ${var.lakercm_schema}
+
+      development: true
+
+      notifications:
+        - email_recipients:
+            - ${var.notifications_email}
+          alerts:
+            # on-update-failure intentionally dropped: the refresh cron (jobs
+            # bundle) retries transient platform blips (max_retries) and only
+            # emails on_failure after retries are exhausted, so per-attempt
+            # update failures were a duplicate flood source. on-flow-failure
+            # still surfaces terminal per-flow data/expectation errors a retry
+            # won't fix.
+            - on-flow-failure
+
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+        - level: CAN_VIEW
+          group_name: users
+        - level: CAN_RUN
+          service_principal_name: ${var.reviewer_sp_client_id}
+
+targets:
+  dev:
+    resources:
+      pipelines:
+        medical_documents_pipeline:
+          development: true
+          event_log:
+            catalog: ${var.catalog}
+            schema: ${var.lakercm_schema}
+            name: documents_pipeline_events_dev
+
+  prod:
+    resources:
+      pipelines:
+        medical_documents_pipeline:
+          development: false

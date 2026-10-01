@@ -1,0 +1,162 @@
+# =============================================================================
+# Unity AI Gateway model services — per-tier LLM routing
+# =============================================================================
+# One service per complexity tier (low / med / high), each an 80/20 split plus
+# a fallback, with no model in more than one tier. The agent routes to them when
+# agent_routing_enabled is true and agent_llm_endpoint_{low,med,high} name them
+# (the dev target sets the names; routing itself stays off until flipped).
+#
+# DEV ONLY FOR NOW. scripts/bundle_registry.py deploys this bundle for the dev
+# target only (targets=("dev",)), so these services exist in dev's schema and
+# nowhere else. `model_services` is a direct-engine-only resource type, which
+# is why this is its own `engine: direct` bundle.
+#
+# =============================================================================
+# ROSTERS — the owner's convention (2026-09-24): 80% / 20% / fallback
+# =============================================================================
+#   tier  80%              20%              fallback          effort
+#   ----  ---------------  ---------------  ----------------  ------
+#   low   gpt-6-luna       glm-5-3-flash    deepseek-v4-flash low
+#   med   gpt-6-sol        kimi-k3          gemini-3-8-flash  medium
+#   high  claude-opus-5-5  gpt-6-astra      grok-4-6          high
+#
+# Every fallback comes from a provider outside its tier's arms (DeepSeek,
+# Google, xAI), and no model appears twice, which
+# scripts/probe_tier_destinations.py checks statically.
+#
+# KNOWN RISKS from the 2026-09-24 probe of the previous rosters (re-run the probe
+# before relying on these tiers; it creates nothing and costs cents):
+#   * glm-5-3-flash ignored the out-of-pocket cap in every claims-floor run, at
+#     low, high and max effort.
+#   * deepseek-v4-flash (the 0731 build) ran out of tokens on the claims floor;
+#     deepseek-v4-1-flash passed it.
+#   * grok-4-6 failed admission over the gateway /responses API: "Invalid task
+#     type llm/v1/chat for external model provider: Amazon Bedrock - grok". As
+#     HIGH's fallback it would fail exactly when the fallback is needed.
+#   * gpt-6-astra was not probed.
+#       python3 scripts/probe_tier_destinations.py --profile <profile> --floor
+#
+# COMPLIANCE before cost: this agent handles PHI. grok-4-6 is served through an
+# external provider (the admission error names Amazon Bedrock), and the model
+# entries for glm-5-3-flash, deepseek-v4-flash and kimi-k3 don't say "hosted by
+# Databricks". Confirm each one's data handling before these tiers carry real
+# claims.
+#
+# The randomization unit is the CONVERSATION: agent/llm.py sends
+# `x-session-affinity: <thread_id>` on every gateway call. Each service writes
+# its own payload table (inference_table), which attributes turns to arms.
+#
+# lifecycle.prevent_destroy: ADVISORY ONLY. On the direct engine it is not
+# reliably enforced (databricks/cli#4872). Each service owns its payload table,
+# so read every plan: a recreate drops it.
+#
+# DABs note: `inference_table` has no `disabled` field (unlike the TF resource) —
+# the block's presence enables it.
+# =============================================================================
+
+resources:
+  model_services:
+    # ---- LOW tier: greetings, "next document", single-fact lookups -----------
+    agent_llm_tier_low:
+      parent: schemas/${var.catalog}.${var.lakercm_schema}
+      model_service_id: lakercm-agent-llm-low
+      comment: "LakeRCM agent LOW tier — 80/20 GPT-6 Luna / GLM-5.3 Flash; fails over to DeepSeek V4 Flash."
+      config:
+        routing:
+          destinations:
+            - destination_type: DESTINATION_TYPE_PAY_PER_TOKEN_FOUNDATION_MODEL
+              name: system.ai.databricks-gpt-6-luna
+              traffic_percentage: 80
+              pay_per_token_config:
+                model: models/system.ai.databricks-gpt-6-luna
+            - destination_type: DESTINATION_TYPE_PAY_PER_TOKEN_FOUNDATION_MODEL
+              name: system.ai.databricks-glm-5-3-flash
+              traffic_percentage: 20
+              pay_per_token_config:
+                model: models/system.ai.databricks-glm-5-3-flash
+          fallback:
+            destinations:
+              - destination_type: DESTINATION_TYPE_PAY_PER_TOKEN_FOUNDATION_MODEL
+                name: system.ai.databricks-deepseek-v4-flash-0731
+                traffic_percentage: 0
+                pay_per_token_config:
+                  model: models/system.ai.databricks-deepseek-v4-flash-0731
+        inference_table:
+          parent: schemas/${var.catalog}.${var.lakercm_schema}
+          table_name_prefix: lakercm_agent_llm_low
+      grants:
+        - principal: ${var.agent_sp_client_id}
+          privileges:
+            - EXECUTE
+      lifecycle:
+        prevent_destroy: true
+
+    # ---- MED tier: one reasoning step / one document tool call (the bulk) ----
+    agent_llm_tier_med:
+      parent: schemas/${var.catalog}.${var.lakercm_schema}
+      model_service_id: lakercm-agent-llm-med
+      comment: "LakeRCM agent MED tier — 80/20 GPT-6 Sol / Kimi K3; fails over to Gemini 3.8 Flash."
+      config:
+        routing:
+          destinations:
+            - destination_type: DESTINATION_TYPE_PAY_PER_TOKEN_FOUNDATION_MODEL
+              name: system.ai.databricks-gpt-6-sol
+              traffic_percentage: 80
+              pay_per_token_config:
+                model: models/system.ai.databricks-gpt-6-sol
+            - destination_type: DESTINATION_TYPE_PAY_PER_TOKEN_FOUNDATION_MODEL
+              name: system.ai.databricks-kimi-k3
+              traffic_percentage: 20
+              pay_per_token_config:
+                model: models/system.ai.databricks-kimi-k3
+          fallback:
+            destinations:
+              - destination_type: DESTINATION_TYPE_PAY_PER_TOKEN_FOUNDATION_MODEL
+                name: system.ai.databricks-gemini-3-8-flash
+                traffic_percentage: 0
+                pay_per_token_config:
+                  model: models/system.ai.databricks-gemini-3-8-flash
+        inference_table:
+          parent: schemas/${var.catalog}.${var.lakercm_schema}
+          table_name_prefix: lakercm_agent_llm_med
+      grants:
+        - principal: ${var.agent_sp_client_id}
+          privileges:
+            - EXECUTE
+      lifecycle:
+        prevent_destroy: true
+
+    # ---- HIGH tier: multi-step, cross-document, high-stakes adjudication -----
+    agent_llm_tier_high:
+      parent: schemas/${var.catalog}.${var.lakercm_schema}
+      model_service_id: lakercm-agent-llm-high
+      comment: "LakeRCM agent HIGH tier — 80/20 Claude Opus 5.5 / GPT-6 Astra; fails over to Grok 4.6."
+      config:
+        routing:
+          destinations:
+            - destination_type: DESTINATION_TYPE_PAY_PER_TOKEN_FOUNDATION_MODEL
+              name: system.ai.databricks-claude-opus-5-5
+              traffic_percentage: 80
+              pay_per_token_config:
+                model: models/system.ai.databricks-claude-opus-5-5
+            - destination_type: DESTINATION_TYPE_PAY_PER_TOKEN_FOUNDATION_MODEL
+              name: system.ai.databricks-gpt-6-astra
+              traffic_percentage: 20
+              pay_per_token_config:
+                model: models/system.ai.databricks-gpt-6-astra
+          fallback:
+            destinations:
+              - destination_type: DESTINATION_TYPE_PAY_PER_TOKEN_FOUNDATION_MODEL
+                name: system.ai.databricks-grok-4-6
+                traffic_percentage: 0
+                pay_per_token_config:
+                  model: models/system.ai.databricks-grok-4-6
+        inference_table:
+          parent: schemas/${var.catalog}.${var.lakercm_schema}
+          table_name_prefix: lakercm_agent_llm_high
+      grants:
+        - principal: ${var.agent_sp_client_id}
+          privileges:
+            - EXECUTE
+      lifecycle:
+        prevent_destroy: true

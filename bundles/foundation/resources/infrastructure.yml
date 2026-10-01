@@ -1,0 +1,77 @@
+# =============================================================================
+# Infrastructure Resources
+# =============================================================================
+# Unity Catalog schema and UC Volumes for document storage. The SQL warehouses
+# are declared in app_warehouse.yml and rt_warehouse.yml (same bundle).
+# =============================================================================
+
+resources:
+  schemas:
+    lakercm_schema:
+      name: ${var.lakercm_schema}
+      catalog_name: ${var.catalog}
+      comment: "Schema for LakeRCM document extraction and review"
+      properties:
+        environment: ${bundle.target}
+        project: lakercm
+        managed_by: databricks_asset_bundle
+      grants:
+        - principal: ${var.user_email}
+          privileges:
+            - ALL_PRIVILEGES
+        - principal: ${var.agent_sp_client_id}
+          privileges:
+            - USE_SCHEMA
+            - SELECT
+            - MODIFY
+            - READ_VOLUME
+            - WRITE_VOLUME
+            - EXECUTE
+            - CREATE_FUNCTION
+            - APPLY_TAG
+            - MANAGE
+        - principal: ${var.reviewer_sp_client_id}
+          privileges:
+            - USE_SCHEMA
+            - SELECT
+            - MODIFY
+            - READ_VOLUME
+            - WRITE_VOLUME
+        - principal: account users
+          privileges:
+            - USE_SCHEMA
+            - SELECT
+            - READ_VOLUME
+            - WRITE_VOLUME
+
+  volumes:
+    documents_input:
+      name: ${var.documents_input_volume_name}
+      catalog_name: ${var.catalog}
+      schema_name: ${resources.schemas.lakercm_schema.name}
+      volume_type: MANAGED
+      comment: "Upload location for documents"
+
+    documents_output:
+      name: ${var.documents_output_volume_name}
+      catalog_name: ${var.catalog}
+      schema_name: ${resources.schemas.lakercm_schema.name}
+      volume_type: MANAGED
+      comment: "Processed document outputs"
+
+    # Where already-ingested source documents go once bronze has them.
+    #
+    # A SEPARATE VOLUME, not a subdirectory of documents_input, and that is the
+    # whole point. bronze_doc_parsed reads
+    # `STREAM read_files('<documents_input>/', pathGlobFilter => '*.{pdf,png,...}')`
+    # -- read_files recurses, and the glob matches the FILENAME, not the path. So
+    # an archive folder inside the input volume still matches, and because Auto
+    # Loader keys its checkpoint on the file PATH, every moved file would look
+    # brand new and be re-parsed through ai_parse_document. Archiving would cost
+    # more than leaving the files alone.
+    documents_archive:
+      name: ${var.documents_archive_volume_name}
+      catalog_name: ${var.catalog}
+      schema_name: ${resources.schemas.lakercm_schema.name}
+      volume_type: MANAGED
+      comment: "Source documents already ingested into bronze; outside the Auto Loader path"

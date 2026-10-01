@@ -1,0 +1,97 @@
+# =============================================================================
+# Databricks App Resource — OntoBricks (one app: UI/REST/GraphQL + mounted MCP)
+# =============================================================================
+# Source: the fetched, pinned OntoBricks tree at build/ontobricks (never
+# committed — Databricks License), plus our combined_app.py entrypoint copied
+# in by scripts/fetch_ontobricks_source.py.
+#
+# The command keeps OntoBricks' dev dependency group (no --no-dev): fastmcp
+# lives there (main pyproject dependency-groups.dev), and combined_app.py
+# imports it to mount the MCP server at /mcp. Env mirrors app.yaml.template
+# plus the mounted-MCP wiring; the registry lives in Lakebase (the dev project)
+# and a UC volume. The app SP's Postgres role is registered by the
+# lakebase_roles step. The registry's UC schema + volume are declared as bundle
+# resources (resources/registry.yml) so they exist before the bootstrap runs;
+# scripts/bootstrap_ontobricks.py then grants the app SP narrow privileges on
+# that schema, asserts it holds nothing catalog-wide, initialises the registry
+# and imports/builds the LakeRCM domain.
+# =============================================================================
+
+resources:
+  apps:
+    ontobricks_app:
+      name: ${var.ontobricks_app_name}
+      description: "OntoBricks knowledge graph for LakeRCM (UI + REST/GraphQL + MCP at /mcp). Databricks Labs, pinned."
+      source_code_path: ../../../build/ontobricks
+
+      config:
+        # Keep the dev group (fastmcp) — combined_app.py mounts the MCP server.
+        command:
+          - "uv"
+          - "run"
+          - "--frozen"
+          - "--extra"
+          - "lakebase"
+          - "python"
+          - "combined_app.py"
+        env:
+          # --- OntoBricks own identity + companion (one app: point at itself) --
+          - name: ONTOBRICKS_APP_NAME
+            value: ${var.ontobricks_app_name}
+          - name: MCP_APP_NAME
+            value: ${var.ontobricks_app_name}
+          # Analytics job is a separate heavy workload; keep it off for the demo.
+          - name: ONTOBRICKS_ANALYTICS_JOB_ENABLED
+            value: "false"
+
+          # --- Registry: UC volume (binaries) + Delta triples live here --------
+          - name: REGISTRY_CATALOG
+            value: ${var.catalog}
+          - name: REGISTRY_SCHEMA
+            value: ${var.ontobricks_registry_schema}
+          - name: REGISTRY_VOLUME
+            value: ${var.ontobricks_registry_volume}
+          - name: REGISTRY_VOLUME_PATH
+            value: "/Volumes/${var.catalog}/${var.ontobricks_registry_schema}/${var.ontobricks_registry_volume}"
+
+          # --- Structured registry store: Lakebase (the dev project) -----------
+          # PGHOST/PGPORT/PGDATABASE/PGUSER are auto-injected by the Apps runtime
+          # from the bound `postgres` resource below; LAKEBASE_SCHEMA selects the
+          # registry schema within that database.
+          - name: LAKEBASE_SCHEMA
+            value: "ontobricks_registry"
+          - name: LAKEBASE_PROJECT
+            value: ${var.lakebase_project_id}
+          - name: LAKEBASE_BRANCH
+            value: ${var.lakebase_branch_id}
+
+          # --- Build warehouse (STANDARD, not the read-only RT warehouse) ------
+          - name: DATABRICKS_SQL_WAREHOUSE_ID
+            value_from: sql-warehouse
+
+      # Typed resources: value_from sources above + native SP grants.
+      resources:
+        - name: sql-warehouse
+          sql_warehouse:
+            id: ${var.ontobricks_app_warehouse_id}
+            permission: CAN_USE
+        # Lakebase registry store. CAN_CONNECT_AND_CREATE lets the app SP create
+        # the ontobricks_registry schema in the dev project on first boot, and
+        # makes the runtime inject PGHOST/PGPORT/PGDATABASE/PGUSER.
+        - name: ontobricks-registry-db
+          postgres:
+            branch: "projects/${var.lakebase_project_id}/branches/${var.lakebase_branch_id}"
+            database: "projects/${var.lakebase_project_id}/branches/${var.lakebase_branch_id}/databases/databricks-postgres"
+            permission: CAN_CONNECT_AND_CREATE
+
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+        # The reviewer app's /api/kg routes and the agent's /mcp tools call this
+        # app as their own SPs; the users group opens "Open in OntoBricks".
+        - level: CAN_USE
+          service_principal_name: ${var.reviewer_sp_client_id}
+        - level: CAN_USE
+          service_principal_name: ${var.agent_sp_client_id}
+        - level: CAN_USE
+          group_name: users

@@ -1,0 +1,59 @@
+# =============================================================================
+# Standard SQL Warehouse: alerts, dashboard, Genie, MLflow, provisioning SQL
+# =============================================================================
+# The writable warehouse. It runs everything the read-only Reyden warehouse
+# (rt_warehouse.yml) cannot or should not:
+#   - every deploy-time SQL step: catalog grants, the semantic / analytics and
+#     governance layers, the reference-data seed (scripts/_warehouse_sql.py).
+#     It is the ONLY warehouse DDL, MERGE or GRANT may target;
+#   - Genie (bundles/genie), which Lakehouse//RT does not support yet;
+#   - MLflow tracing: the agent's MLFLOW_TRACING_SQL_WAREHOUSE_ID and the
+#     bind job's `mlflow.monitoring.sqlWarehouseId` tag. The tracing backend
+#     runs DDL and writes on the warehouse it is given;
+#   - the DBSQL alerts and the observability dashboard (bundles/observability).
+#     The alerts' 5-minute schedules keep this warehouse warm either way, so
+#     running them here lets the Reyden warehouse auto-stop when idle.
+# The reviewer app's analytics and the agent's analytics tools read through
+# the Reyden warehouse instead.
+#
+# Why dedicated, not the workspace Serverless Starter:
+#   The reviewer SP needs CAN_USE on a warehouse the bundle controls so
+#   the binding survives env churn. Earlier we suffix-matched a personal
+#   dev warehouse via name-based discovery, which the SP couldn't use.
+#
+# Why 2X-Small Serverless, not bigger:
+#   Its queries are small (alert checks, metadata, grants) and serverless
+#   cold starts are ~5-15s vs ~3-7min on Classic. min_num_clusters: 1 keeps
+#   the first query after a deploy off a cold start; max_num_clusters: 2
+#   absorbs a small concurrent burst.
+#
+# Consumers resolve it by name (lookup: warehouse: ${var.app_warehouse_name}).
+# =============================================================================
+
+resources:
+  sql_warehouses:
+    lakercm_app_warehouse:
+      name: ${var.app_warehouse_name}
+      cluster_size: 2X-Small
+      enable_serverless_compute: true
+      warehouse_type: PRO
+      channel:
+        name: CHANNEL_NAME_CURRENT
+      auto_stop_mins: 10
+      min_num_clusters: 1
+      max_num_clusters: 2
+      tags:
+        custom_tags:
+          - key: project
+            value: lakercm
+          - key: managed_by
+            value: databricks_asset_bundle
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+        - level: CAN_USE
+          service_principal_name: ${var.reviewer_sp_client_id}
+        - level: CAN_USE
+          service_principal_name: ${var.agent_sp_client_id}
+        - level: CAN_USE
+          group_name: users

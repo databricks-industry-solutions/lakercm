@@ -1,0 +1,118 @@
+# =============================================================================
+# SDP Pipeline Resources - Review Analytics
+# =============================================================================
+# Forward ETL over the two Lakebase→UC CDC mirror tables (no JDBC, no Lakebase
+# coupling, no run-as-human requirement):
+#
+#   lb_medical_documents_history ┐ full-recompute MVs (QUALIFY dedupe,
+#   lb_*_reviews_history         ┘ BINARY-UUID decode)
+#        → silver_documents, silver_reviews        (current state)
+#        → dim_document, fact_review,              (Kimball gold, atomic grain
+#          fact_document_processing                 — no monthly pre-aggregation)
+#
+# The review_metrics / document_ops_metrics METRIC VIEWS on top are created by
+# scripts/create_semantic_layer.py (metric views are not a DAB resource type).
+#
+# Bootstrap requirement: the lb_* mirrors are written by the Lakebase change
+# data feed, NOT by this bundle. The feed has no DAB resource type, and it needs
+# the tables the reviewer app's migrations create, so the apps bundle's
+# reverse_cdf post-step creates it (scripts/create_reverse_cdf.py). On a new
+# environment the semantic-layer post-step therefore skips this pipeline's run
+# and the objects over its tables, and apps' analytics_layer adds them.
+#
+# The retired gold_review_analytics MV goes INACTIVE (still queryable) when
+# its definition disappears; it is dropped manually as the LAST cutover step
+# after the app endpoints are verified. Do not set pipelines.dropInactiveTables.
+# =============================================================================
+
+resources:
+  pipelines:
+    review_analytics_pipeline:
+      name: ${var.analytics_pipeline_name}
+      catalog: ${var.catalog}
+      target: ${var.lakercm_schema}
+      serverless: true
+      edition: ADVANCED
+      channel: CURRENT
+      photon: true
+      # Event log materialized as a UC table so the observability bundle's
+      # analytics-liveness alert can query pipeline-run state from the warehouse
+      # (mirrors the documents pipeline's documents_pipeline_events).
+      event_log:
+        catalog: ${var.catalog}
+        schema: ${var.lakercm_schema}
+        name: analytics_pipeline_events
+
+      libraries:
+        - file:
+            path: ../../../pipelines/silver/silver_documents.sql
+        - file:
+            path: ../../../pipelines/silver/silver_reviews.sql
+        - file:
+            path: ../../../pipelines/silver/silver_review_proposals.sql
+        - file:
+            path: ../../../pipelines/gold/gold_dim_document.sql
+        - file:
+            path: ../../../pipelines/gold/gold_fact_review.sql
+        - file:
+            path: ../../../pipelines/gold/gold_fact_document_processing.sql
+        - file:
+            path: ../../../pipelines/gold/gold_fact_agent_proposal.sql
+        - file:
+            path: ../../../pipelines/gold/gold_extraction_fidelity.sql
+
+      configuration:
+        pipelines.environmentVersion: "4"
+        # CDC mirror sources — substituted into the silver/gold SQL via ${...}.
+        cdc_docs_table: ${var.catalog}.${var.lakercm_schema}.lb_medical_documents_history
+        cdc_reviews_table: ${var.catalog}.${var.lakercm_schema}.lb_document_extraction_reviews_history
+        cdc_proposals_table: ${var.catalog}.${var.lakercm_schema}.lb_document_review_proposals_history
+        # Ground truth for scoring a proposal's CORRECTNESS, not just whether a
+        # reviewer accepted it. Written by the synthetic generator.
+        manifest_table: ${var.catalog}.${var.lakercm_schema}.synthetic_document_manifest
+        # Documents-pipeline outputs read by gold_extraction_fidelity. They are
+        # datasets of the OTHER pipeline, so they must be named fully-qualified
+        # here rather than referenced bare (which would make SDP look for a
+        # dataset this pipeline does not define).
+        validate_codes_table: ${var.catalog}.${var.lakercm_schema}.silver_validate_codes
+        extraction_labels_table: ${var.catalog}.${var.lakercm_schema}.gold_extraction_labels
+
+      development: true
+      # Triggered. Recompute is driven by lakercm_analytics_refresh
+      # (jobs bundle), a 5-minute cron job that triggers this pipeline.
+      continuous: false
+
+      notifications:
+        - email_recipients:
+            - ${var.notifications_email}
+          alerts:
+            # on-update-failure intentionally dropped: the refresh cron (jobs
+            # bundle) retries transient platform blips (max_retries) and only
+            # emails on_failure after retries are exhausted, so per-attempt
+            # update failures were a duplicate flood source. on-flow-failure
+            # still surfaces terminal per-flow data/expectation errors a retry
+            # won't fix.
+            - on-flow-failure
+
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+        - level: CAN_VIEW
+          group_name: users
+
+targets:
+  dev:
+    resources:
+      pipelines:
+        review_analytics_pipeline:
+          development: true
+          event_log:
+            catalog: ${var.catalog}
+            schema: ${var.lakercm_schema}
+            name: analytics_pipeline_events_dev
+
+  prod:
+    resources:
+      pipelines:
+        review_analytics_pipeline:
+          development: false

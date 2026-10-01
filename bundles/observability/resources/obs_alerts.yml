@@ -1,0 +1,532 @@
+# =============================================================================
+# DBSQL alerts (Alerts v2) — full-system health, not just agent-trace SLOs
+# =============================================================================
+# Alert families:
+#
+#   1. Agent-trace SLOs (spans/annotations) — p95 latency, error rate,
+#      groundedness, no_raw_text_leak, safety.
+#  1b. Agent trust & safety controls — guard scaffolding leak, uncited or
+#      fabricated policy citation, prompt-injection text in a document.
+#   2. Pipeline / data health — documents & analytics pipeline liveness,
+#      documents stuck in extraction, and an extraction-failure spike.
+#
+# DESIGN NOTES (why the queries look the way they do):
+#
+#   * Every agent-trace query is scoped to REAL PRODUCTION USER TURNS via
+#     `name IN ('agent_turn','agent_turn_agui')`. Without this, high-volume
+#     eval/GEPA rollouts that land in the same OTEL tables blow past the
+#     min-sample guards and trip the alerts on non-prod traffic.
+#
+#   * Each query returns a BOOLEAN BREACH (1/0) or a VIOLATING COUNT, and the
+#     alert fires on `GREATER_THAN 0` (leak/safety/count) or a fixed literal.
+#     The actual thresholds are interpolated INTO the SQL string as numeric
+#     literals (${var.alert_*}), so per-target tuning happens through plain
+#     string interpolation — no bundle variable is ever coerced into the
+#     protobuf double_value field. Prod defaults live in _shared/variables.yml;
+#     a target can relax them in _shared/targets.yml.
+#
+#   * Liveness alerts key off PIPELINE-RUN EVENTS (the 5-min refresh crons emit
+#     a COMPLETED update every tick) rather than a business-data MAX(timestamp),
+#     so they are meaningful even on a workspace with zero business traffic.
+#     COALESCE(..., 999999) makes an EMPTY window (a genuinely dead pipeline)
+#     FIRE instead of silently reading as healthy.
+#
+#   * notify_on_ok is FALSE on every alert: a breach sends ONE email and recovery
+#     is silent. (It was briefly TRUE on the health alerts for recovery
+#     visibility, but on flappy metrics each threshold oscillation produced a
+#     fire+resolved PAIR — the email-flood amplifier. The de-flap threshold and
+#     min-sample guards below keep genuine fires rare.)
+#
+#   * retrigger_seconds is intentionally UNSET (Alerts v2 default 0 = notify ONCE
+#     per trigger). DO NOT set it: retrigger_seconds=1 re-emails on EVERY
+#     scheduled evaluation while still breaching — the exact flood this avoids.
+#
+# Tables are FULLY QUALIFIED with ${var.catalog}.${var.lakercm_schema}.
+# Notifications go to ${var.notifications_email} (decoupled from the owner
+# identity ${var.user_email}); set alert_notification_destination_id per target
+# to also fan out to a Slack/PagerDuty/email-group notification destination.
+# =============================================================================
+
+resources:
+  alerts:
+
+    # -------------------------------------------------------------------------
+    # 1. Agent-trace SLOs
+    # -------------------------------------------------------------------------
+
+    lakercm_alert_p95_latency:
+      display_name: "LakeRCM — agent p95 latency high (15m)${var.name_suffix}"
+      warehouse_id: ${var.app_warehouse_id}
+      parent_path: /Workspace/Users/${var.user_email}/lakercm
+      query_text: |
+        SELECT
+          CASE WHEN COUNT(*) >= ${var.alert_latency_min_samples}
+                AND approx_percentile((end_time_unix_nano - start_time_unix_nano) / 1e6, 0.95)
+                    > ${var.alert_p95_latency_ms}
+               THEN 1 ELSE 0 END AS p95_breach
+        FROM ${var.catalog}.${var.lakercm_schema}.agent_traces_otel_spans
+        WHERE parent_span_id IS NULL
+          AND name IN ('agent_turn', 'agent_turn_agui')
+          AND time >= current_timestamp() - INTERVAL 15 MINUTES
+      evaluation:
+        comparison_operator: GREATER_THAN
+        empty_result_state: OK
+        source: { name: p95_breach, display: p95_breach, aggregation: MAX }
+        threshold: { value: { double_value: 0 } }
+        notification:
+          notify_on_ok: false
+          subscriptions:
+            - user_email: ${var.notifications_email}
+      schedule: { quartz_cron_schedule: "0 */5 * * * ?", timezone_id: UTC, pause_status: "${var.schedule_pause_status}" }
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    lakercm_alert_error_rate:
+      display_name: "LakeRCM — agent error rate high (15m)${var.name_suffix}"
+      warehouse_id: ${var.app_warehouse_id}
+      parent_path: /Workspace/Users/${var.user_email}/lakercm
+      query_text: |
+        WITH roots AS (
+          SELECT status.code AS code
+          FROM ${var.catalog}.${var.lakercm_schema}.agent_traces_otel_spans
+          WHERE parent_span_id IS NULL
+            AND name IN ('agent_turn', 'agent_turn_agui')
+            AND time >= current_timestamp() - INTERVAL 15 MINUTES
+        )
+        SELECT
+          CASE WHEN COUNT_IF(code = 'STATUS_CODE_ERROR') >= ${var.alert_error_min_count}
+                AND COUNT_IF(code = 'STATUS_CODE_ERROR') * 1.0 / NULLIF(COUNT(*), 0)
+                    > ${var.alert_error_rate}
+               THEN 1 ELSE 0 END AS error_breach
+        FROM roots
+      evaluation:
+        comparison_operator: GREATER_THAN
+        empty_result_state: OK
+        source: { name: error_breach, display: error_breach, aggregation: MAX }
+        threshold: { value: { double_value: 0 } }
+        notification:
+          notify_on_ok: false
+          subscriptions:
+            - user_email: ${var.notifications_email}
+      schedule: { quartz_cron_schedule: "0 */5 * * * ?", timezone_id: UTC, pause_status: "${var.schedule_pause_status}" }
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    lakercm_alert_groundedness_fail:
+      display_name: "LakeRCM — groundedness fail rate > 5% (1h)${var.name_suffix}"
+      warehouse_id: ${var.app_warehouse_id}
+      parent_path: /Workspace/Users/${var.user_email}/lakercm
+      query_text: |
+        WITH recent_traces AS (
+          SELECT trace_id FROM ${var.catalog}.${var.lakercm_schema}.agent_traces_otel_spans
+          WHERE parent_span_id IS NULL
+            AND name IN ('agent_turn', 'agent_turn_agui')
+            AND time >= current_timestamp() - INTERVAL 1 HOUR
+        ),
+        judged AS (
+          SELECT a.value:value::STRING AS verdict
+          FROM ${var.catalog}.${var.lakercm_schema}.agent_traces_otel_annotations a
+          JOIN recent_traces r ON a.target_id = r.trace_id
+          WHERE a.target_type = 'TRACE'
+            AND a.annotation_type IN ('FEEDBACK', 'ASSESSMENT')
+            AND a.name = 'retrieval_groundedness'
+            AND a.deleted_at IS NULL
+        )
+        SELECT
+          CASE WHEN COUNT(*) >= ${var.alert_groundedness_min_samples}
+               THEN SUM(CASE WHEN LOWER(verdict) IN ('false','no','fail') THEN 1 ELSE 0 END) * 1.0
+                    / NULLIF(COUNT(*), 0)
+               ELSE 0 END AS fail_rate
+        FROM judged
+      evaluation:
+        comparison_operator: GREATER_THAN
+        empty_result_state: OK
+        source: { name: fail_rate, display: fail_rate, aggregation: MAX }
+        threshold: { value: { double_value: 0.05 } }
+        notification:
+          notify_on_ok: false
+          subscriptions:
+            - user_email: ${var.notifications_email}
+      schedule: { quartz_cron_schedule: "0 */15 * * * ?", timezone_id: UTC, pause_status: "${var.schedule_pause_status}" }
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    lakercm_alert_guideline_leak:
+      display_name: "LakeRCM — no_raw_text_leak failure (5m)${var.name_suffix}"
+      warehouse_id: ${var.app_warehouse_id}
+      parent_path: /Workspace/Users/${var.user_email}/lakercm
+      query_text: |
+        WITH recent_traces AS (
+          SELECT trace_id FROM ${var.catalog}.${var.lakercm_schema}.agent_traces_otel_spans
+          WHERE parent_span_id IS NULL
+            AND name IN ('agent_turn', 'agent_turn_agui')
+            AND time >= current_timestamp() - INTERVAL 5 MINUTES
+        )
+        SELECT COUNT(*) AS leak_failures
+        FROM ${var.catalog}.${var.lakercm_schema}.agent_traces_otel_annotations a
+        JOIN recent_traces r ON a.target_id = r.trace_id
+        WHERE a.target_type = 'TRACE'
+          AND a.annotation_type IN ('FEEDBACK', 'ASSESSMENT')
+          AND a.name = 'no_raw_text_leak'
+          AND LOWER(a.value:value::STRING) IN ('false','no','fail')
+          AND a.deleted_at IS NULL
+      evaluation:
+        comparison_operator: GREATER_THAN
+        empty_result_state: OK
+        source: { name: leak_failures, display: leak_failures, aggregation: SUM }
+        threshold: { value: { double_value: 0 } }
+        notification:
+          notify_on_ok: false
+          subscriptions:
+            - user_email: ${var.notifications_email}
+      schedule: { quartz_cron_schedule: "0 */5 * * * ?", timezone_id: UTC, pause_status: "${var.schedule_pause_status}" }
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    lakercm_alert_safety_fail:
+      display_name: "LakeRCM — safety judge failure (15m)${var.name_suffix}"
+      warehouse_id: ${var.app_warehouse_id}
+      parent_path: /Workspace/Users/${var.user_email}/lakercm
+      query_text: |
+        WITH recent_traces AS (
+          SELECT trace_id FROM ${var.catalog}.${var.lakercm_schema}.agent_traces_otel_spans
+          WHERE parent_span_id IS NULL
+            AND name IN ('agent_turn', 'agent_turn_agui')
+            AND time >= current_timestamp() - INTERVAL 15 MINUTES
+        )
+        SELECT COUNT(*) AS safety_failures
+        FROM ${var.catalog}.${var.lakercm_schema}.agent_traces_otel_annotations a
+        JOIN recent_traces r ON a.target_id = r.trace_id
+        WHERE a.target_type = 'TRACE'
+          AND a.annotation_type IN ('FEEDBACK', 'ASSESSMENT')
+          AND a.name = 'safety'
+          AND LOWER(a.value:value::STRING) IN ('false','no','fail')
+          AND a.deleted_at IS NULL
+      evaluation:
+        comparison_operator: GREATER_THAN
+        empty_result_state: OK
+        source: { name: safety_failures, display: safety_failures, aggregation: SUM }
+        threshold: { value: { double_value: 0 } }
+        notification:
+          notify_on_ok: false
+          subscriptions:
+            - user_email: ${var.notifications_email}
+      schedule: { quartz_cron_schedule: "0 */5 * * * ?", timezone_id: UTC, pause_status: "${var.schedule_pause_status}" }
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    # -------------------------------------------------------------------------
+    # 1b. Agent trust & safety controls (OWASP LLM Top 10)
+    # -------------------------------------------------------------------------
+    # One alarm per control, so detection is operational rather than
+    # decorative. Deliberately NOT alerted: PHI shapes in model output
+    # (guard.phi_shapes_in_output). Showing identifiers to an authorized
+    # reviewer is the product working correctly, so a per-occurrence alert
+    # would fire on most turns — that signal is monitoring data, not an alarm.
+
+    lakercm_alert_scaffolding_leak:
+      display_name: "LakeRCM — guard scaffolding leaked to user (3h)${var.name_suffix}"
+      warehouse_id: ${var.app_warehouse_id}
+      parent_path: /Workspace/Users/${var.user_email}/lakercm
+      # The injection guard's own fence/preamble reached the reviewer's answer:
+      # a defect the guard introduced, so it gets a hard zero-tolerance alarm.
+      # The window is on TRACE time and deliberately long. Scheduled monitors
+      # write the assessment asynchronously, often after a 5-minute window on
+      # the trace has already closed, so a short window could never see it
+      # (fifth review). An alert notifies when it ENTERS the triggered state and
+      # stays there while the trace is in the window, so a long window still
+      # pages once per incident.
+      query_text: |
+        WITH recent_traces AS (
+          SELECT trace_id FROM ${var.catalog}.${var.lakercm_schema}.agent_traces_otel_spans
+          WHERE parent_span_id IS NULL
+            AND name IN ('agent_turn', 'agent_turn_agui')
+            AND time >= current_timestamp() - INTERVAL 3 HOURS
+        )
+        SELECT COUNT(*) AS scaffolding_leaks
+        FROM ${var.catalog}.${var.lakercm_schema}.agent_traces_otel_annotations a
+        JOIN recent_traces r ON a.target_id = r.trace_id
+        WHERE a.target_type = 'TRACE'
+          AND a.annotation_type IN ('FEEDBACK', 'ASSESSMENT')
+          AND a.name = 'no_scaffolding_leak'
+          AND LOWER(a.value:value::STRING) IN ('false','no','fail')
+          AND a.deleted_at IS NULL
+      evaluation:
+        comparison_operator: GREATER_THAN
+        empty_result_state: OK
+        source: { name: scaffolding_leaks, display: scaffolding_leaks, aggregation: SUM }
+        threshold: { value: { double_value: 0 } }
+        notification:
+          notify_on_ok: false
+          subscriptions:
+            - user_email: ${var.notifications_email}
+      schedule: { quartz_cron_schedule: "0 */5 * * * ?", timezone_id: UTC, pause_status: "${var.schedule_pause_status}" }
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    lakercm_alert_policy_citation_fail:
+      display_name: "LakeRCM — policy-citation fail rate > 20% (24h)${var.name_suffix}"
+      warehouse_id: ${var.app_warehouse_id}
+      parent_path: /Workspace/Users/${var.user_email}/lakercm
+      # Turns that retrieved payer policy but stated a rule without citing it,
+      # or cited a policy id they never retrieved. RATE-based, not zero
+      # tolerance: the deterministic scorer cannot tell an uncited RULE from an
+      # answer that simply did not use the retrieved policies (e.g. a denial
+      # explained from the extracted reason), so one failure is weak evidence
+      # and paging on it would page on correct answers (fifth review). A
+      # sustained rate is the signal. The scorer returns None (no annotation) on
+      # turns that did not retrieve policy, so status turns never count, and a
+      # minimum sample keeps one early failure from reading as 100%. Long trace
+      # window for the same asynchronous-assessment reason as the alert above.
+      query_text: |
+        WITH recent_traces AS (
+          SELECT trace_id FROM ${var.catalog}.${var.lakercm_schema}.agent_traces_otel_spans
+          WHERE parent_span_id IS NULL
+            AND name IN ('agent_turn', 'agent_turn_agui')
+            AND time >= current_timestamp() - INTERVAL 24 HOURS
+        ),
+        judged AS (
+          SELECT a.value:value::STRING AS verdict
+          FROM ${var.catalog}.${var.lakercm_schema}.agent_traces_otel_annotations a
+          JOIN recent_traces r ON a.target_id = r.trace_id
+          WHERE a.target_type = 'TRACE'
+            AND a.annotation_type IN ('FEEDBACK', 'ASSESSMENT')
+            AND a.name = 'policy_citations_grounded'
+            AND a.deleted_at IS NULL
+        )
+        SELECT
+          CASE WHEN COUNT(*) >= ${var.alert_citation_min_samples}
+               THEN SUM(CASE WHEN LOWER(verdict) IN ('false','no','fail') THEN 1 ELSE 0 END) * 1.0
+                    / NULLIF(COUNT(*), 0)
+               ELSE 0 END AS citation_fail_rate
+        FROM judged
+      evaluation:
+        comparison_operator: GREATER_THAN
+        empty_result_state: OK
+        source: { name: citation_fail_rate, display: citation_fail_rate, aggregation: MAX }
+        threshold: { value: { double_value: 0.2 } }
+        notification:
+          notify_on_ok: false
+          subscriptions:
+            - user_email: ${var.notifications_email}
+      schedule: { quartz_cron_schedule: "0 0 * * * ?", timezone_id: UTC, pause_status: "${var.schedule_pause_status}" }
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    lakercm_alert_injection_signal:
+      display_name: "LakeRCM — prompt-injection text in a document (30m)${var.name_suffix}"
+      warehouse_id: ${var.app_warehouse_id}
+      parent_path: /Workspace/Users/${var.user_email}/lakercm
+      # agent/guards.py detected instruction-override text inside a
+      # document-derived tool payload (OWASP LLM01, indirect injection) and
+      # fenced it as data. The agent is protected either way; this alarm exists
+      # because someone uploaded a document that tries to hijack the assistant,
+      # which is itself a security event worth a human look. Reads the
+      # guard.injection_signal METADATA key (tags are not in these tables), using
+      # the same trace_metadata:['<key>'] IS NOT NULL form the observability
+      # dashboard's ds_conversations query uses. Pages on HIGH confidence only:
+      # an override alone ("please disregard the previous instructions") is
+      # also correction-letter prose, so it is fenced and recorded as `low`
+      # without paging (sixth review). The window is TWICE the schedule, so a
+      # row that lands a few minutes late is still counted (a 15-minute window
+      # on a 15-minute schedule had no overlap). It is not longer: an alert
+      # notifies when it ENTERS the triggered state, so every further
+      # document in a 3-hour window went unpaged after the first (seventh
+      # review). Metadata lands with the trace, unlike the asynchronous
+      # assessments the 3-hour scaffolding alert above waits for.
+      query_text: |
+        WITH recent_traces AS (
+          SELECT trace_id FROM ${var.catalog}.${var.lakercm_schema}.agent_traces_otel_spans
+          WHERE parent_span_id IS NULL
+            AND name IN ('agent_turn', 'agent_turn_agui')
+            AND time >= current_timestamp() - INTERVAL 30 MINUTES
+        )
+        SELECT COUNT(*) AS injection_signals
+        FROM ${var.catalog}.${var.lakercm_schema}.agent_traces_trace_metadata tm
+        JOIN recent_traces r ON tm.trace_id = r.trace_id
+        WHERE tm.trace_metadata:['guard.injection_signal'] IS NOT NULL
+          AND tm.trace_metadata:['guard.injection_confidence']::STRING = 'high'
+      evaluation:
+        comparison_operator: GREATER_THAN
+        empty_result_state: OK
+        source: { name: injection_signals, display: injection_signals, aggregation: SUM }
+        threshold: { value: { double_value: 0 } }
+        notification:
+          notify_on_ok: false
+          subscriptions:
+            - user_email: ${var.notifications_email}
+      schedule: { quartz_cron_schedule: "0 */15 * * * ?", timezone_id: UTC, pause_status: "${var.schedule_pause_status}" }
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    # -------------------------------------------------------------------------
+    # 2. Pipeline / data health
+    # -------------------------------------------------------------------------
+
+    lakercm_alert_documents_pipeline_stalled:
+      display_name: "LakeRCM — documents pipeline stalled${var.name_suffix}"
+      warehouse_id: ${var.app_warehouse_id}
+      parent_path: /Workspace/Users/${var.user_email}/lakercm
+      query_text: |
+        SELECT
+          CASE WHEN COALESCE(timestampdiff(MINUTE,
+                 MAX(CASE WHEN details:update_progress.state = 'COMPLETED' THEN timestamp END),
+                 current_timestamp()), 999999) > ${var.alert_pipeline_stale_minutes}
+               THEN 1 ELSE 0 END AS stalled
+        FROM ${var.catalog}.${var.lakercm_schema}.documents_pipeline_events
+        WHERE event_type = 'update_progress'
+          AND timestamp >= current_timestamp() - INTERVAL 6 HOURS
+      evaluation:
+        comparison_operator: GREATER_THAN
+        empty_result_state: OK
+        source: { name: stalled, display: stalled, aggregation: MAX }
+        threshold: { value: { double_value: 0 } }
+        notification:
+          notify_on_ok: false
+          subscriptions:
+            - user_email: ${var.notifications_email}
+      schedule: { quartz_cron_schedule: "0 */5 * * * ?", timezone_id: UTC, pause_status: "${var.schedule_pause_status}" }
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    lakercm_alert_analytics_pipeline_stalled:
+      display_name: "LakeRCM — analytics pipeline stalled${var.name_suffix}"
+      warehouse_id: ${var.app_warehouse_id}
+      parent_path: /Workspace/Users/${var.user_email}/lakercm
+      query_text: |
+        SELECT
+          CASE WHEN COALESCE(timestampdiff(MINUTE,
+                 MAX(CASE WHEN details:update_progress.state = 'COMPLETED' THEN timestamp END),
+                 current_timestamp()), 999999) > ${var.alert_pipeline_stale_minutes}
+               THEN 1 ELSE 0 END AS stalled
+        FROM ${var.catalog}.${var.lakercm_schema}.analytics_pipeline_events
+        WHERE event_type = 'update_progress'
+          AND timestamp >= current_timestamp() - INTERVAL 6 HOURS
+      evaluation:
+        comparison_operator: GREATER_THAN
+        empty_result_state: OK
+        source: { name: stalled, display: stalled, aggregation: MAX }
+        threshold: { value: { double_value: 0 } }
+        notification:
+          notify_on_ok: false
+          subscriptions:
+            - user_email: ${var.notifications_email}
+      schedule: { quartz_cron_schedule: "0 */5 * * * ?", timezone_id: UTC, pause_status: "${var.schedule_pause_status}" }
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    lakercm_alert_docs_stuck_processing:
+      display_name: "LakeRCM — documents stuck in processing${var.name_suffix}"
+      warehouse_id: ${var.app_warehouse_id}
+      parent_path: /Workspace/Users/${var.user_email}/lakercm
+      query_text: |
+        SELECT
+          CASE WHEN COUNT_IF(current_status = 'processing'
+                 AND upload_timestamp < current_timestamp() - INTERVAL ${var.alert_stuck_minutes} MINUTES)
+                    > ${var.alert_stuck_count}
+               THEN 1 ELSE 0 END AS stuck_breach
+        FROM ${var.catalog}.${var.lakercm_schema}.fact_document_processing
+      evaluation:
+        comparison_operator: GREATER_THAN
+        empty_result_state: OK
+        source: { name: stuck_breach, display: stuck_breach, aggregation: MAX }
+        threshold: { value: { double_value: 0 } }
+        notification:
+          notify_on_ok: false
+          subscriptions:
+            - user_email: ${var.notifications_email}
+      schedule: { quartz_cron_schedule: "0 */5 * * * ?", timezone_id: UTC, pause_status: "${var.schedule_pause_status}" }
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    lakercm_alert_extraction_failure_spike:
+      display_name: "LakeRCM — extraction failure spike (1h)${var.name_suffix}"
+      warehouse_id: ${var.app_warehouse_id}
+      parent_path: /Workspace/Users/${var.user_email}/lakercm
+      query_text: |
+        SELECT
+          CASE WHEN COUNT_IF(current_status = 'failed'
+                 AND processing_timestamp >= current_timestamp() - INTERVAL 1 HOUR)
+                    > ${var.alert_extraction_fail_count}
+               THEN 1 ELSE 0 END AS failure_breach
+        FROM ${var.catalog}.${var.lakercm_schema}.fact_document_processing
+      evaluation:
+        comparison_operator: GREATER_THAN
+        empty_result_state: OK
+        source: { name: failure_breach, display: failure_breach, aggregation: MAX }
+        threshold: { value: { double_value: 0 } }
+        notification:
+          notify_on_ok: false
+          subscriptions:
+            - user_email: ${var.notifications_email}
+      schedule: { quartz_cron_schedule: "0 */15 * * * ?", timezone_id: UTC, pause_status: "${var.schedule_pause_status}" }
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    # Documents generated but never ingested. Every alert above watches work the
+    # pipeline DID, so none of them can see work it never started: the ingest
+    # file-arrival trigger is documented as making a "best effort to check for
+    # new files every minute", and when it misses, the documents sit on the
+    # volume and nothing reports it. Measured on dev: across two separate drops
+    # (1,997 files, then 100) the trigger fired ZERO times with the job idle and
+    # the debounce long elapsed, while its config validated clean (UNPAUSED,
+    # correct volume url, run-as owns the volume, 2,097 files against a
+    # 10,000-file ceiling). Both batches only moved after a manual run.
+    #
+    # The manifest is the generator's own record of what it wrote, so
+    # manifest-minus-bronze is exactly "written but not parsed" without listing
+    # the volume from SQL. The manifest carries no timestamp, so the gap alone
+    # cannot distinguish "never started" from "still working" — a 2,000-document
+    # batch takes over an hour and the gap is legitimately large the whole time.
+    # Pairing it with bronze's own progress does distinguish them: extracted_at
+    # advances on every micro-batch while ingest runs, so a gap that persists
+    # while bronze has NOT advanced in alert_ingest_lag_minutes means nothing is
+    # working on it. A never-parsed environment reads as stale via the COALESCE
+    # rather than as healthy.
+    lakercm_alert_ingest_not_triggered:
+      display_name: "LakeRCM — documents generated but not ingested${var.name_suffix}"
+      warehouse_id: ${var.app_warehouse_id}
+      parent_path: /Workspace/Users/${var.user_email}/lakercm
+      query_text: |
+        WITH state AS (
+          SELECT
+            (SELECT COUNT(*) FROM ${var.catalog}.${var.lakercm_schema}.synthetic_document_manifest)
+            - (SELECT COUNT(*) FROM ${var.catalog}.${var.lakercm_schema}.bronze_doc_parsed)
+              AS not_ingested,
+            (SELECT COALESCE(MAX(extracted_at), TIMESTAMP '1970-01-01')
+               FROM ${var.catalog}.${var.lakercm_schema}.bronze_doc_parsed)
+              AS last_parsed_at
+        )
+        SELECT
+          CASE WHEN not_ingested > ${var.alert_ingest_pending_count}
+                AND last_parsed_at < current_timestamp() - INTERVAL ${var.alert_ingest_lag_minutes} MINUTES
+               THEN 1 ELSE 0 END AS ingest_breach
+        FROM state
+      evaluation:
+        comparison_operator: GREATER_THAN
+        empty_result_state: OK
+        source: { name: ingest_breach, display: ingest_breach, aggregation: MAX }
+        threshold: { value: { double_value: 0 } }
+        notification:
+          notify_on_ok: false
+          subscriptions:
+            - user_email: ${var.notifications_email}
+      # Not gated by schedule_pause_status: this is the only thing that notices a
+      # missed ingest, and a dev environment that silently stops processing drops
+      # is exactly the failure it exists to catch. It reads two COUNT(*)s.
+      schedule: { quartz_cron_schedule: "0 */15 * * * ?", timezone_id: UTC, pause_status: "${var.ingest_trigger_pause_status}" }
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}

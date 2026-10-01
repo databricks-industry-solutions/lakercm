@@ -1,0 +1,41 @@
+# =============================================================================
+# LakeRCM — Genie bundle
+# =============================================================================
+# Deploys the "LakeRCM Review & Extraction Quality" Genie space as a native
+# DAB `genie_spaces` resource over the analytics gold layer (pipelines bundle).
+#
+# REQUIRES Databricks CLI >= 1.3.0: genie_spaces is a direct-deployment-engine
+# resource (no Terraform provider equivalent). This bundle was born on
+# `engine: direct`; the sibling bundles keep their original terraform engine
+# and state — do not copy `engine: direct` to them without running
+# `databricks bundle deployment migrate` first.
+#
+# Space content (tables, instructions, examples, benchmarks) is NOT authored
+# here: scripts/genie_space_content.py remains the single source of truth, and
+# the `genie_render` pre-step (scripts/render_genie_space.py) materializes it
+# to lakercm.geniespace.json (gitignored) for the resource's file_path.
+#
+# The prod space was ADOPTED, not created, via one-time:
+#   databricks bundle deployment bind lakercm_genie_space <space-id> -t prod
+# `bundle destroy` TRASHES the space (conversation + eval-run history) —
+# `bundle deployment unbind` is the safe detach.
+# =============================================================================
+
+bundle:
+  name: lakercm-genie
+  engine: direct
+
+include:
+  - ../_shared/variables.yml
+  - ../_shared/targets.yml
+  - resources/*.yml
+
+variables:
+  # Declared locally (not in _shared) because the CLI eagerly resolves every
+  # declared lookup; only bundles that consume the warehouse should carry it.
+  # Resolves the bundle-managed app warehouse by name -> the space's
+  # warehouse_id. app_warehouse_name comes from the shared variables.yml.
+  genie_warehouse_id:
+    description: "ID of the bundle-managed app SQL warehouse (resolved by name)"
+    lookup:
+      warehouse: ${var.app_warehouse_name}

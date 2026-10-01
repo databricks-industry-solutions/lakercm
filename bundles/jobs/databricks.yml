@@ -1,0 +1,46 @@
+# =============================================================================
+# LakeRCM — Jobs bundle
+# =============================================================================
+# The 7 eval / prompt-tuning / refresh jobs. Pure consumers: they reference the
+# two pipelines by id-lookup (documents_pipeline_id / analytics_pipeline_id) and
+# the experiments by path-var, so this bundle deploys AFTER pipelines + mlflow.
+#
+# First-deploy on a fresh workspace: the pipeline lookups fail until the
+# pipelines exist — the deploy wrapper primes BUNDLE_VAR_<id>=PENDING then
+# reconciles post-deploy (prime_first_deploy_placeholders / reconcile_lookup_ids).
+#
+# sync.paths -> repo root so ../../../jobs/*.py are in sync scope.
+# =============================================================================
+
+bundle:
+  name: lakercm-jobs
+
+include:
+  - ../_shared/variables.yml
+  - ../_shared/targets.yml
+  - resources/*.yml
+
+variables:
+  # Local lookups (not shared — eager-resolved). Resolve the two DLT pipelines
+  # by name; the names come from the shared variables.yml / targets.yml so they
+  # match the pipelines bundle's resolved names exactly.
+  documents_pipeline_id:
+    description: "ID of the documents DLT pipeline (resolved by name)"
+    lookup:
+      pipeline: ${var.medical_documents_pipeline_name}
+  analytics_pipeline_id:
+    description: "ID of the analytics DLT pipeline (resolved by name)"
+    lookup:
+      pipeline: ${var.analytics_pipeline_name}
+  # The standard SQL warehouse the triage job reads gold + the terminology on.
+  # Local, like the pipeline lookups above: the CLI eager-resolves every
+  # declared lookup, so a shared declaration would force every bundle to
+  # resolve it.
+  app_warehouse_id:
+    description: "ID of the standard SQL warehouse (resolved by name)"
+    lookup:
+      warehouse: ${var.app_warehouse_name}
+
+sync:
+  paths:
+    - ../..

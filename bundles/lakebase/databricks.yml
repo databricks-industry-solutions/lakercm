@@ -1,0 +1,24 @@
+# =============================================================================
+# LakeRCM — Lakebase bundle
+# =============================================================================
+# Lakebase Autoscaling Postgres project + prod branch. Independent stateful
+# lifecycle. Owns the cross-cutting Lakebase post-deploy steps in the deploy
+# orchestrator: PG-host sync, role provisioning, and checkpointer migration.
+#
+# This bundle still deploys ZERO terraform resources. The synced table
+# (resources/synced_table.yml.deferred) is now schema-valid and carries its own
+# adoption runbook, but stays deferred until run deliberately; the
+# project/branch/endpoint are intentionally never bundle-managed. Read the
+# warning in resources/lakebase.yml before touching anything here, and always
+# `bundle plan` first.
+#
+# No external artifact files → no sync.paths override.
+# =============================================================================
+
+bundle:
+  name: lakercm-lakebase
+
+include:
+  - ../_shared/variables.yml
+  - ../_shared/targets.yml
+  - resources/*.yml

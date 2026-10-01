@@ -1,0 +1,411 @@
+/* Claude.ai-style messages — no bubbles, left-aligned, avatar + name */
+
+.msg {
+  display: flex;
+  gap: 0.75rem;
+  max-width: 768px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 1rem 0;
+  animation: msg-fade-in 0.2s ease;
+}
+
+.msg + .msg {
+  border-top: 1px solid oklch(0.95 0.005 80);
+}
+
+@keyframes msg-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Avatar */
+.msg__avatar {
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.msg__avatar-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.msg__avatar-circle--user {
+  background: oklch(0.55 0.12 195 / 0.12);
+  color: oklch(0.45 0.12 195);
+}
+
+.msg__avatar-circle--assistant {
+  background: oklch(0.55 0.12 195);
+  color: white;
+}
+
+/* Body */
+.msg__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.msg__name {
+  display: block;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.35rem;
+}
+
+/* Content */
+.msg__content {
+  color: var(--text-primary);
+}
+
+.msg__text {
+  margin: 0;
+  line-height: 1.6;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+}
+
+/* Tool calls */
+.msg__tools {
+  margin-bottom: 0.5rem;
+}
+
+/* Markdown */
+.msg__markdown {
+  line-height: 1.65;
+  color: var(--text-primary);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.9rem;
+}
+
+.msg__markdown p {
+  margin: 0 0 0.5rem 0;
+}
+
+.msg__markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.msg__markdown h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0.75rem 0 0.5rem 0;
+  color: var(--text-primary);
+}
+
+.msg__markdown h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0.5rem 0 0.25rem 0;
+  color: var(--text-primary);
+}
+
+.msg__markdown ul,
+.msg__markdown ol {
+  margin: 0.25rem 0 0.5rem 0;
+  padding-left: 1.25rem;
+}
+
+.msg__markdown li {
+  margin-bottom: 0.2rem;
+}
+
+.msg__markdown strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.msg__markdown code {
+  background: var(--neutral-100);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.82rem;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.msg__markdown pre {
+  background: var(--neutral-100);
+  padding: 0.75rem;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  margin: 0.5rem 0;
+}
+
+.msg__markdown pre code {
+  background: none;
+  padding: 0;
+}
+
+.msg__markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+  font-size: 0.82rem;
+}
+
+.msg__markdown th,
+.msg__markdown td {
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+
+.msg__markdown th {
+  background: var(--neutral-100);
+  font-weight: 600;
+}
+
+/* Thinking dots */
+.msg__thinking {
+  display: flex;
+  gap: 4px;
+  padding: 0.25rem 0;
+}
+
+.msg__dot {
+  width: 6px;
+  height: 6px;
+  background: oklch(0.68 0.008 80);
+  border-radius: 50%;
+  animation: msg-dot-bounce 1.2s ease infinite;
+}
+
+.msg__dot:nth-child(2) { animation-delay: 0.2s; }
+.msg__dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes msg-dot-bounce {
+  0%, 80%, 100% { transform: scale(0.8); opacity: 0.4; }
+  40% { transform: scale(1.2); opacity: 1; }
+}
+
+/* Retry button — shown only on error messages */
+.msg__retry {
+  margin-top: 0.6rem;
+}
+
+.msg__retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: oklch(0.55 0.12 195 / 0.10);
+  color: oklch(0.40 0.12 195);
+  border: 1px solid oklch(0.55 0.12 195 / 0.30);
+  border-radius: 6px;
+  padding: 0.4rem 0.75rem;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.msg__retry-btn:hover {
+  background: oklch(0.55 0.12 195 / 0.18);
+}
+
+/* Action row — copy / thumbs-up / thumbs-down (always visible after stream completes) */
+.msg__actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 0.6rem;
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+.msg:hover .msg__actions {
+  opacity: 1;
+}
+
+.msg__action-btn {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.4rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.msg__action-btn:hover:not(:disabled) {
+  background: var(--neutral-100);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.msg__action-btn--up {
+  background: oklch(0.62 0.13 145 / 0.14);
+  color: oklch(0.42 0.14 145);
+  border-color: oklch(0.62 0.13 145 / 0.35);
+}
+
+.msg__action-btn--down {
+  background: oklch(0.62 0.16 25 / 0.12);
+  color: oklch(0.45 0.18 25);
+  border-color: oklch(0.62 0.16 25 / 0.35);
+}
+
+.msg__action-btn--success {
+  color: oklch(0.42 0.14 145);
+}
+
+.msg__action-btn:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+/* Rationale form (shows after thumbs-down) */
+.msg__rationale {
+  margin-top: 0.6rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--neutral-100);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  animation: msg-rationale-in 0.18s ease;
+}
+
+@keyframes msg-rationale-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.msg__rationale-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.msg__rationale-title {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.msg__rationale-close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.2rem;
+  border-radius: 4px;
+  display: flex;
+}
+
+.msg__rationale-close:hover {
+  color: var(--text-primary);
+  background: oklch(0.95 0.005 80);
+}
+
+.msg__rationale-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.msg__rationale-tag {
+  background: var(--surface-raised);
+  border: 1px solid oklch(0.90 0.005 80);
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.74rem;
+  color: oklch(0.40 0.01 80);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.msg__rationale-tag:hover:not(:disabled) {
+  border-color: oklch(0.55 0.12 195 / 0.5);
+  color: var(--text-primary);
+}
+
+.msg__rationale-tag--active {
+  background: oklch(0.55 0.12 195 / 0.14);
+  color: oklch(0.40 0.12 195);
+  border-color: oklch(0.55 0.12 195 / 0.5);
+}
+
+.msg__rationale-tag:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.msg__rationale-textarea {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid oklch(0.90 0.005 80);
+  border-radius: 6px;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.84rem;
+  resize: vertical;
+  min-height: 2.5rem;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+
+.msg__rationale-textarea:focus {
+  outline: none;
+  border-color: oklch(0.55 0.12 195 / 0.6);
+  box-shadow: 0 0 0 3px oklch(0.55 0.12 195 / 0.12);
+}
+
+.msg__rationale-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.msg__rationale-submit {
+  background: oklch(0.55 0.12 195);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0.4rem 0.85rem;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.msg__rationale-submit:hover:not(:disabled) {
+  background: oklch(0.48 0.13 195);
+}
+
+.msg__rationale-submit:disabled {
+  background: oklch(0.70 0.05 195);
+  cursor: default;
+}
+
+/* Streaming cursor */
+.msg__cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background: oklch(0.55 0.12 195);
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: msg-blink 0.8s ease infinite;
+}
+
+@keyframes msg-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}

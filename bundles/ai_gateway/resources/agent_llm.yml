@@ -1,0 +1,75 @@
+# =============================================================================
+# The agent's non-routed LLM: dev's own Unity AI Gateway model service
+# =============================================================================
+# var.agent_llm_endpoint names <catalog>.<schema>.lakercm-agent-llm, the
+# blend the agent calls whenever routing is off (and the base every tier falls
+# back to in Phase 1). In prod that service is terraform-managed
+# (infra/ai_gateway/main.tf, imported from a live service). dev had none at all,
+# so its agent had no LLM.
+#
+# This bundle deploys for the dev target only (scripts/bundle_registry.py), so
+# this declares dev's copy and never touches prod's. It mirrors
+# infra/ai_gateway/main.tf's roster: an even 20% across five reasoning models
+# that tool-call via the gateway /responses API, with Claude Opus 5 as the
+# fallback. Keep the two in step when the roster changes. It lives outside
+# model_services.yml because that file holds the routing tiers, which
+# scripts/probe_tier_destinations.py checks as tiers.
+# =============================================================================
+
+resources:
+  model_services:
+    agent_llm:
+      parent: schemas/${var.catalog}.${var.lakercm_schema}
+      model_service_id: lakercm-agent-llm
+      comment: "LakeRCM agent LLM (dev) — even 20% blend across five models; fails over to Claude Opus 5."
+      config:
+        routing:
+          destinations:
+            - destination_type: DESTINATION_TYPE_PAY_PER_TOKEN_FOUNDATION_MODEL
+              name: system.ai.databricks-claude-opus-5
+              traffic_percentage: 20
+              pay_per_token_config:
+                model: models/system.ai.databricks-claude-opus-5
+            - destination_type: DESTINATION_TYPE_PAY_PER_TOKEN_FOUNDATION_MODEL
+              name: system.ai.databricks-gpt-5-6-sol
+              traffic_percentage: 20
+              pay_per_token_config:
+                model: models/system.ai.databricks-gpt-5-6-sol
+            - destination_type: DESTINATION_TYPE_PAY_PER_TOKEN_FOUNDATION_MODEL
+              name: system.ai.databricks-glm-5-3
+              traffic_percentage: 20
+              pay_per_token_config:
+                model: models/system.ai.databricks-glm-5-3
+            # databricks-deepseek-v4-pro-0813 was here and is DEPRECATED: the
+            # gateway 400s it with "This endpoint ... is deprecated", so a fifth
+            # of every agent turn failed. Confirmed by direct invocation
+            # (2026-09-30) -- and note the serving-endpoints API still reports it
+            # state.ready=READY, so endpoint health does NOT catch this; only an
+            # actual call does. v4-1-flash is the current DeepSeek on this
+            # workspace and was verified to answer before this edit.
+            - destination_type: DESTINATION_TYPE_PAY_PER_TOKEN_FOUNDATION_MODEL
+              name: system.ai.databricks-deepseek-v4-1-flash
+              traffic_percentage: 20
+              pay_per_token_config:
+                model: models/system.ai.databricks-deepseek-v4-1-flash
+            - destination_type: DESTINATION_TYPE_PAY_PER_TOKEN_FOUNDATION_MODEL
+              name: system.ai.databricks-kimi-k3
+              traffic_percentage: 20
+              pay_per_token_config:
+                model: models/system.ai.databricks-kimi-k3
+          fallback:
+            destinations:
+              - destination_type: DESTINATION_TYPE_PAY_PER_TOKEN_FOUNDATION_MODEL
+                name: system.ai.databricks-claude-opus-5
+                traffic_percentage: 0
+                pay_per_token_config:
+                  model: models/system.ai.databricks-claude-opus-5
+        inference_table:
+          parent: schemas/${var.catalog}.${var.lakercm_schema}
+          table_name_prefix: lakercm_agent_llm
+      grants:
+        - principal: ${var.agent_sp_client_id}
+          privileges:
+            - EXECUTE
+      lifecycle:
+        prevent_destroy: true

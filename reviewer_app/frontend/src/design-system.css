@@ -1,0 +1,568 @@
+/* ========================================================================
+   MODERN HEALTHCARE DESIGN SYSTEM
+   Refined Minimalism: Sophisticated, Clean, Trustworthy
+   ======================================================================== */
+
+
+:root {
+  /* ========================================================================
+     TYPOGRAPHY
+     ======================================================================== */
+
+  /* 'DM Sans' first — the Databricks brand face — then the system stack. It is
+     NOT loaded yet: self-hosting it means a @fontsource dependency and ~100KB of
+     woff2, and a webfont is the one part of a restyle whose result has to be
+     looked at rather than reasoned about. Naming it here is harmless (an absent
+     family is skipped) and means shipping the file later is a one-line change
+     rather than a sweep. */
+  --font-display: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-body: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  /* Referenced by ReviewNotes and HoldReasonBanner for codes and note text, and
+     previously undefined — both were falling back to their own literal stacks. */
+  --font-mono: 'DM Mono', ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  /* Density / type scale — drive Compact vs Relaxed everywhere via calc(). */
+  --density-scale: 1;
+  --type-scale: 1;
+
+  --text-xs:   calc(0.75rem  * var(--type-scale));   /* 12px */
+  --text-sm:   calc(0.875rem * var(--type-scale));   /* 14px */
+  --text-base: calc(1rem     * var(--type-scale));   /* 16px */
+  --text-lg:   calc(1.125rem * var(--type-scale));   /* 18px */
+  --text-xl:   calc(1.25rem  * var(--type-scale));   /* 20px */
+  --text-2xl:  calc(1.5rem   * var(--type-scale));   /* 24px */
+  --text-3xl:  calc(1.875rem * var(--type-scale));   /* 30px */
+  --text-4xl:  calc(2.25rem  * var(--type-scale));   /* 36px */
+  --text-5xl:  calc(3rem     * var(--type-scale));   /* 48px */
+  --text-6xl:  calc(3.75rem  * var(--type-scale));   /* 60px */
+
+  --font-light: 300;
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  /* ========================================================================
+     COLOR PALETTE - Databricks brand
+     ========================================================================
+
+     Lava is the signature Databricks colour, and it is deliberately NOT the
+     primary interactive colour here. Two reasons, both measured:
+
+     1. Contrast. Lava #FF3621 is 3.62:1 against white — below the 4.5:1 WCAG AA
+        floor for body text, and equally below it for white text ON Lava. A
+        button or link coloured Lava is brand-accurate and unreadable. Navy is
+        13.59:1 and carries the same brand identity.
+     2. Meaning. This is a claims review tool where red already means "a code is
+        invalid", "extraction failed", "a diagnosis was silently rewritten". A
+        red-orange primary would put brand colour and danger state in the same
+        visual register on the one screen where that distinction decides whether
+        a reviewer trusts a document.
+
+     So: Navy carries structure and interaction, Lava is reserved for brand marks
+     and the active indicator, and the status colours below are tuned for text
+     contrast rather than taken raw from the brand sheet. Raw Green (3.04:1) and
+     raw Yellow (1.90:1) both fail as text; each gets a text-safe variant and
+     keeps the brand hue for borders and icons.
+
+     Ratios in comments are computed against --color-surface (Oat #f9f7f4), which
+     is what most of this UI actually sits on. */
+
+  /* Primary — Databricks Navy. Structure, interaction, text. */
+  --primary-50: #f2f5f6;
+  --primary-100: #dfe7e9;
+  --primary-200: #bccace;
+  --primary-300: #91a8ae;
+  --primary-400: #62808a;
+  --primary-500: #3d5f6b;
+  --primary-600: #2b4a55;
+  --primary-700: #1f3c46;
+  --primary-800: #1b3139;   /* Databricks Navy — 12.71:1 on Oat */
+  --primary-900: #121f25;
+
+  /* Lava — brand accent ONLY. Never body text, never a text background.
+     Safe uses: brand mark, active-tab underline, focus ring, icon fills. */
+  --lava-400: #ff7a68;
+  --lava-500: #ff5038;
+  --lava-600: #ff3621;      /* Databricks Lava — 3.39:1 on Oat: NOT text-safe */
+  --lava-700: #d92a18;
+  --lava-800: #a02217;      /* text-safe Lava — 7.18:1 on Oat */
+
+  /* Neutral — Oat. The brand's warm off-whites, which the previous warm-gray
+     ramp was already reaching for. */
+  --neutral-50: #f9f7f4;    /* Oat Light */
+  --neutral-100: #eeede9;   /* Oat Medium */
+  --neutral-200: #e0ded8;
+  --neutral-300: #c8c5bd;
+  --neutral-400: #a6a29a;
+  --neutral-500: #7d7a73;
+  --neutral-600: #5c5954;
+  --neutral-700: #43413d;
+  --neutral-800: #2b2a27;
+  --neutral-900: #1a1917;
+
+  /* Success — brand Green, plus a text-safe darkening. */
+  --success-50: #e6f7f1;
+  --success-500: #00a972;   /* brand Green — 2.84:1: borders and icons only */
+  --success-600: #00734d;   /* text-safe — 5.52:1 on Oat */
+  --success-700: #005a3c;
+
+  /* Warning — brand Yellow, which is the worst offender for text. */
+  --warning-50: #fff8e6;
+  --warning-500: #ffab00;   /* brand Yellow — 1.77:1: borders and icons only */
+  --warning-600: #8a4b00;   /* text-safe — 6.36:1 on Oat */
+
+  /* Error — held clearly apart from Lava so brand accent never reads as a
+     failure. Deeper and less orange than Lava 600. */
+  --error-50: #fdecea;
+  --error-500: #c9382a;
+  --error-600: #a02217;     /* 7.18:1 on Oat */
+
+  /* Info — brand Blue, the one status hue that passes AA unmodified. */
+  --info-50: #eaf2f9;
+  --info-500: #2272b4;      /* 4.75:1 on Oat */
+  --info-600: #1b5a8e;      /* 6.77:1 on Oat */
+
+  /* Semantic Tokens */
+  --color-bg: #ffffff;
+  --color-surface: #f9f7f4;
+  --surface-raised: #ffffff;
+  --color-border: #e0ded8;
+  --color-text: #1a1917;
+  --color-text-light: #43413d;
+  --color-text-muted: #5c5954;
+  --color-text-subtle: #a6a29a;
+
+  /* Interaction. --accent is what component CSS reaches for; pointing it at
+     Navy rather than Lava is the whole decision above, in one line. */
+  --accent: #1b3139;
+  --accent-hover: #2b4a55;
+  --brand-accent: #ff3621;
+
+  /* Status triplets (fg / bg / border).
+
+     These were being referenced by component CSS — HoldReasonBanner, ReviewNotes —
+     while being defined NOWHERE, so every one of them was silently falling back
+     to a hardcoded literal in the component. That is invisible until a restyle:
+     the palette changes and those components do not move, because they were never
+     reading the palette. Defining them here is what makes them themeable. */
+  --danger-fg: var(--error-600);
+  --danger-bg: var(--error-50);
+  --danger-border: #f0b8b2;
+
+  --warning-fg: var(--warning-600);
+  --warning-bg: var(--warning-50);
+  --warning-border: #f0d79a;
+
+  --success-fg: var(--success-600);
+  --success-bg: var(--success-50);
+  --success-border: #a8ddc9;
+
+  --info-fg: var(--info-600);
+  --info-bg: var(--info-50);
+  --info-border: #aecde6;
+
+  /* ========================================================================
+     SPACING
+     ======================================================================== */
+
+  --space-1:  calc(0.25rem * var(--density-scale));
+  --space-2:  calc(0.5rem  * var(--density-scale));
+  --space-3:  calc(0.75rem * var(--density-scale));
+  --space-4:  calc(1rem    * var(--density-scale));
+  --space-5:  calc(1.25rem * var(--density-scale));
+  --space-6:  calc(1.5rem  * var(--density-scale));
+  --space-8:  calc(2rem    * var(--density-scale));
+  --space-10: calc(2.5rem  * var(--density-scale));
+  --space-12: calc(3rem    * var(--density-scale));
+  --space-16: calc(4rem    * var(--density-scale));
+  --space-20: calc(5rem    * var(--density-scale));
+  --space-24: calc(6rem    * var(--density-scale));
+
+  /* ========================================================================
+     RADIUS
+     ======================================================================== */
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-full: 9999px;
+
+  /* ========================================================================
+     SHADOWS - Subtle & Modern
+     ======================================================================== */
+
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+
+  /* ========================================================================
+     TRANSITIONS
+     ======================================================================== */
+
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ========================================================================
+     COMPONENT TOKENS
+     ======================================================================== */
+
+  --header-height: 72px;
+  --container-width: 1200px;
+
+  /* ========================================================================
+     SEMANTIC ALIASES — referenced as var(--name, fallback) across the app.
+     These names are also overridden in the [data-theme='dark'] block below.
+     ======================================================================== */
+
+  --surface: oklch(0.985 0.003 80);
+  --surface-raised: oklch(0.995 0.003 80);
+  --surface-overlay: #ffffff;
+  --surface-sunken: oklch(0.97 0.005 80);
+
+  --border: oklch(0.92 0.005 80);
+  --border-strong: oklch(0.85 0.005 80);
+
+  --text-primary: oklch(0.22 0.01 80);
+  --text-secondary: oklch(0.55 0.01 80);
+  --text-muted: oklch(0.65 0.01 80);
+
+  --accent: oklch(0.55 0.12 195);
+  --accent-strong: oklch(0.45 0.13 195);
+  --accent-subtle: oklch(0.55 0.12 195 / 0.08);
+  --accent-on: white;
+
+  --pill-ok-bg: oklch(0.94 0.07 145);
+  --pill-ok-fg: oklch(0.32 0.13 145);
+  --pill-warn-bg: oklch(0.95 0.06 70);
+  --pill-warn-fg: oklch(0.42 0.14 65);
+  --pill-idle-bg: oklch(0.94 0.005 80);
+  --pill-idle-fg: oklch(0.4 0.01 80);
+  --pill-danger-bg: oklch(0.95 0.06 25);
+  --pill-danger-fg: oklch(0.45 0.18 25);
+
+  --shadow-card: 0 1px 2px oklch(0.22 0.01 80 / 0.04),
+                 0 1px 3px oklch(0.22 0.01 80 / 0.06);
+  --shadow-overlay: 0 10px 24px oklch(0.22 0.01 80 / 0.12),
+                    0 2px 6px oklch(0.22 0.01 80 / 0.06);
+  --ring-inset: inset 0 0 0 1px oklch(0 0 0 / 0);
+}
+
+/* ========================================================================
+   DARK THEME OVERRIDES
+   ======================================================================== */
+
+:root[data-theme='dark'] {
+  /* Cool-tinted dark base, not pure black. */
+  --surface: oklch(0.16 0.012 250);
+  --surface-raised: oklch(0.20 0.011 250);
+  --surface-overlay: oklch(0.24 0.010 250);
+  --surface-sunken: oklch(0.13 0.012 250);
+
+  --border: oklch(0.32 0.008 250);
+  --border-strong: oklch(0.42 0.010 250);
+
+  --text-primary: oklch(0.96 0.005 80);
+  --text-secondary: oklch(0.78 0.008 80);
+  --text-muted: oklch(0.62 0.008 80);
+
+  /* Brighter accent in dark, hold chroma so the teal stays recognizable. */
+  --accent: oklch(0.74 0.13 195);
+  --accent-strong: oklch(0.82 0.14 195);
+  --accent-subtle: oklch(0.74 0.13 195 / 0.14);
+  --accent-on: oklch(0.10 0.012 250);
+
+  /* Map the design-system semantic tokens to dark too, so any file that
+     uses --color-bg / --color-surface / --color-text etc. picks up dark
+     for free. */
+  --color-bg: oklch(0.14 0.012 250);
+  --color-surface: oklch(0.16 0.012 250);
+  --color-border: oklch(0.32 0.008 250);
+  --color-text: oklch(0.96 0.005 80);
+  --color-text-light: oklch(0.80 0.008 80);
+  --color-text-muted: oklch(0.62 0.008 80);
+
+  /* Pills get darker bases with brighter foregrounds. */
+  --pill-ok-bg: oklch(0.32 0.10 145);
+  --pill-ok-fg: oklch(0.92 0.12 145);
+  --pill-warn-bg: oklch(0.36 0.10 70);
+  --pill-warn-fg: oklch(0.92 0.13 70);
+  --pill-idle-bg: oklch(0.30 0.008 250);
+  --pill-idle-fg: oklch(0.85 0.008 80);
+  --pill-danger-bg: oklch(0.34 0.13 25);
+  --pill-danger-fg: oklch(0.92 0.13 25);
+
+  /* No drop shadow on cards in dark — they look smoky. Borders carry
+     elevation. Overlays still need a real shadow so they feel lifted. */
+  --shadow-card: none;
+  --shadow-overlay: 0 12px 28px oklch(0 0 0 / 0.45),
+                    0 2px 6px oklch(0 0 0 / 0.35);
+  --ring-inset: inset 0 1px 0 oklch(1 0 0 / 0.04);
+
+  /* Invert the neutral scale so existing var(--neutral-N) callsites flip
+     automatically. Light-end neutrals (50, 100) become dark page surfaces;
+     dark-end neutrals (700, 900) become light text. Hue shifts from warm
+     gray (80°) to cool dark (250°) at the bottom and warm white (80°) at
+     the top for natural-looking dark UI. */
+  --neutral-50:  oklch(0.16 0.012 250);
+  --neutral-100: oklch(0.20 0.011 250);
+  --neutral-200: oklch(0.32 0.008 250);
+  --neutral-300: oklch(0.42 0.010 250);
+  --neutral-400: oklch(0.55 0.008 80);
+  --neutral-500: oklch(0.66 0.008 80);
+  --neutral-600: oklch(0.75 0.008 80);
+  --neutral-700: oklch(0.85 0.008 80);
+  --neutral-800: oklch(0.92 0.006 80);
+  --neutral-900: oklch(0.96 0.005 80);
+
+  /* Primary blue — keep the hue, raise luminosity slightly so buttons
+     pop on the dark surface. Tinted backgrounds (50/100) become low-alpha
+     overlays so they don't look like flat blue blocks. */
+  --primary-50:  oklch(0.30 0.10 255 / 0.18);
+  --primary-100: oklch(0.32 0.11 255 / 0.28);
+  --primary-200: oklch(0.40 0.12 255 / 0.38);
+  --primary-300: oklch(0.55 0.15 255);
+  --primary-400: oklch(0.60 0.17 255);
+  --primary-500: oklch(0.66 0.18 255);
+  --primary-600: oklch(0.72 0.18 255);
+  --primary-700: oklch(0.80 0.16 255);
+  --primary-800: oklch(0.86 0.13 255);
+  --primary-900: oklch(0.92 0.10 255);
+
+  /* Status palettes — softer in dark to avoid neon look. */
+  --success-50:  oklch(0.30 0.10 145 / 0.20);
+  --success-500: oklch(0.70 0.16 145);
+  --success-600: oklch(0.78 0.16 145);
+  --warning-50:  oklch(0.36 0.11 70 / 0.20);
+  --warning-500: oklch(0.78 0.16 70);
+  --error-50:   oklch(0.34 0.13 25 / 0.20);
+  --error-500:  oklch(0.72 0.18 25);
+}
+
+html[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+html[data-theme='dark'],
+html[data-theme='dark'] body {
+  background: var(--color-bg, oklch(0.14 0.012 250));
+  color: var(--color-text);
+}
+
+/* ========================================================================
+   DENSITY MODES
+   ======================================================================== */
+
+:root[data-density='compact'] {
+  --density-scale: 0.88;
+  --type-scale: 0.96;
+  --header-height: 60px;
+}
+
+:root[data-density='relaxed'] {
+  --density-scale: 1;
+  --type-scale: 1;
+  --header-height: 72px;
+}
+
+/* ========================================================================
+   THEME TRANSITION — animate color/bg changes, never layout properties.
+   ======================================================================== */
+
+body,
+.modern-header,
+.admin-card,
+.settings-pane,
+.settings-rail,
+.user-menu-panel,
+.theme-card,
+.metric-tile,
+.density-option,
+.card,
+.btn,
+.btn-primary,
+.btn-secondary,
+.input,
+.badge {
+  transition: background-color 180ms ease,
+              border-color 180ms ease,
+              color 180ms ease,
+              box-shadow 180ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body, .modern-header, .admin-card, .settings-pane, .settings-rail,
+  .user-menu-panel, .theme-card, .metric-tile, .density-option, .card,
+  .btn, .btn-primary, .btn-secondary, .input, .badge {
+    transition: none;
+  }
+}
+
+/* ========================================================================
+   UTILITY CLASSES
+   ======================================================================== */
+
+.container {
+  width: 100%;
+  max-width: var(--container-width);
+  margin: 0 auto;
+  padding: 0 var(--space-6);
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-6);
+  height: 44px;
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  font-weight: var(--font-medium);
+  border-radius: var(--radius-lg);
+  border: none;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  white-space: nowrap;
+}
+
+.btn-primary {
+  background: var(--primary-600);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: var(--primary-700);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-secondary {
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+  background: var(--surface-overlay);
+}
+
+.btn-lg {
+  height: 52px;
+  padding: 0 var(--space-8);
+  font-size: var(--text-lg);
+}
+
+/* Cards */
+.card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  transition: all var(--transition-base);
+  box-shadow: var(--shadow-card);
+}
+
+.card:hover {
+  box-shadow: var(--shadow-overlay);
+}
+
+/* Inputs */
+.input {
+  width: 100%;
+  height: 52px;
+  padding: 0 var(--space-4);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-base);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--primary-500);
+  box-shadow: 0 0 0 3px var(--primary-100);
+}
+
+.input::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Badge */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  border-radius: var(--radius-full);
+}
+
+.badge-success {
+  background: var(--success-50);
+  color: var(--success-600);
+}
+
+.badge-primary {
+  background: var(--primary-100);
+  color: var(--primary-700);
+}
+
+/* ========================================================================
+   ANIMATIONS
+   ======================================================================== */
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.4s ease-out;
+}
+
+.animate-slideUp {
+  animation: slideUp 0.5s ease-out;
+}
+
+.animate-slideDown {
+  animation: slideDown 0.3s ease-out;
+}
+
+/* Stagger delays */
+.delay-100 { animation-delay: 100ms; }
+.delay-200 { animation-delay: 200ms; }
+.delay-300 { animation-delay: 300ms; }
+.delay-400 { animation-delay: 400ms; }

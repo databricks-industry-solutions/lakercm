@@ -1,0 +1,47 @@
+# =============================================================================
+# The dev target's own Lakebase project
+# =============================================================================
+# dev ran on a `dev` branch of prod's `lakercm` project, which shared the
+# project's settings, its roles and its blast radius with prod. It now has a
+# project of its own, created and owned by this bundle. Unlike prod's project
+# (pre-existing, hand-managed; see lakebase.yml for the bind→REPLACE hazard),
+# this one is born here on the direct engine, so there is no adoption step.
+#
+# Declared under `targets.dev` only: a prod deploy of this bundle creates
+# nothing. The project gets a default branch `production` with a read-write
+# endpoint `primary`; bundles/_shared/targets.yml points the dev target at
+# them (lakebase_project_id / lakebase_branch_id), and the post-steps then
+# register the Postgres roles there (scripts/add_lakebase_roles.py).
+#
+# Settings:
+#   pg_version 17         Lakehouse Sync (the change data feed the analytics
+#                         pipeline reads) requires Postgres 17. Immutable.
+#   1-2 CU, 5-min suspend dev is idle most of the time; prod runs 1-1 CU with a
+#                         24-hour suspend.
+#   7-day history         prod's point-in-time recovery window.
+#
+# Never `bundle destroy` this bundle for dev without meaning it: the project
+# holds the dev reviewer and checkpoint data. A destroyed project is soft-deleted
+# and its id stays taken for the retention window (purge_on_delete is off).
+# lifecycle.prevent_destroy is set, but on the direct engine it is advisory
+# (databricks/cli#4872); read the plan.
+# =============================================================================
+
+targets:
+  dev:
+    resources:
+      postgres_projects:
+        lakercm_dev:
+          project_id: lakercm-dev
+          display_name: "LakeRCM Database (dev)"
+          pg_version: 17
+          history_retention_duration: 604800s
+          default_endpoint_settings:
+            autoscaling_limit_min_cu: 1
+            autoscaling_limit_max_cu: 2
+            suspend_timeout_duration: 300s
+          permissions:
+            - level: CAN_MANAGE
+              user_name: ${var.user_email}
+          lifecycle:
+            prevent_destroy: true

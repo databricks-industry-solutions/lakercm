@@ -1,0 +1,136 @@
+# =============================================================================
+# LakeRCM MLflow Resources
+# =============================================================================
+# Declares the MLflow experiment + UC registered model that traces, scorers,
+# eval runs, and prompt versions all link to.
+#
+# WHY THIS FILE EXISTS:
+#   The agent app runs as a service principal that cannot traverse user-private
+#   workspace paths (`/Users/<email>/...`). Putting the experiment under
+#   `/Shared/...` and granting the SP CAN_EDIT explicitly is the only way to
+#   keep MLflow tracing out of no-op mode (which silently returns the
+#   `MLFLOW_NO_OP_SPAN_TRACE_ID` sentinel and breaks every downstream surface).
+#
+#   The registered model gives every trace a stable UC entity to attribute to
+#   (`mlflow.set_active_model()` in observability.py), enabling per-deploy
+#   trace lineage and `mlflow.search_traces(filter_string="logged_model_id=...")`.
+#
+# Deploy ORDER: this bundle deploys after `foundation` (the schema must exist —
+# the registered_model now references it via ${var.lakercm_schema} rather
+# than a cross-bundle ${resources.*}, so ordering is enforced by the deploy DAG).
+# =============================================================================
+
+resources:
+  experiments:
+    # INERT — the original, co-mingled experiment (prod turns + eval noise).
+    # Bound to its OWN var (NOT ${var.mlflow_experiment_path}) so repurposing
+    # that variable to the new prod path can never rename or destroy this object.
+    # NEVER delete it: a dangling `databricksTraceStorageTable` tag breaks the
+    # MLflow delete API, so a destroy would fail the deploy.
+    lakercm_agent_experiment:
+      name: ${var.mlflow_legacy_experiment_path}${var.name_suffix}
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+        - level: CAN_EDIT
+          service_principal_name: ${var.agent_sp_client_id}
+        - level: CAN_EDIT
+          service_principal_name: ${var.reviewer_sp_client_id}
+        - level: CAN_READ
+          group_name: users
+
+    # PRODUCTION — live agent traces (root span `agent_turn`) + the scheduled
+    # scorer monitor. The agent app + the curation job point here.
+    lakercm_agent_traces_experiment:
+      name: ${var.mlflow_experiment_path}${var.name_suffix}
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+        - level: CAN_EDIT
+          service_principal_name: ${var.agent_sp_client_id}
+        - level: CAN_EDIT
+          service_principal_name: ${var.reviewer_sp_client_id}
+        - level: CAN_READ
+          group_name: users
+
+    # EVAL / OPTIMIZATION — GEPA + holdout-eval + promote-gate rollouts (stateless,
+    # bursty). Isolated from prod so eval noise never floods the monitor. The
+    # gepa/promote/rollback/dataset-gen jobs point here.
+    lakercm_agent_eval_experiment:
+      name: ${var.mlflow_eval_experiment_path}${var.name_suffix}
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+        - level: CAN_EDIT
+          service_principal_name: ${var.agent_sp_client_id}
+        - level: CAN_EDIT
+          service_principal_name: ${var.reviewer_sp_client_id}
+        - level: CAN_READ
+          group_name: users
+
+  registered_models:
+    lakercm_agent_model:
+      catalog_name: ${var.catalog}
+      # Schema lives in the `foundation` bundle now, so reference the name var
+      # directly (was ${resources.schemas.lakercm_schema.name}). Deploy
+      # ordering (foundation before mlflow) guarantees the schema exists first.
+      schema_name: ${var.lakercm_schema}
+      name: lakercm_agent${var.name_suffix}
+      comment: "Logical UC entity for the LangGraph agent. Each app deploy creates a new LoggedModel version under this name; production traces auto-link via mlflow.set_active_model()."
+      grants:
+        - principal: ${var.agent_sp_client_id}
+          privileges:
+            - APPLY_TAG
+            - EXECUTE
+        - principal: ${var.reviewer_sp_client_id}
+          privileges:
+            - APPLY_TAG
+            - EXECUTE
+        - principal: ${var.user_email}
+          privileges:
+            - ALL_PRIVILEGES
+
+  # ── Provisioning job: bind each experiment to its UC OTel trace tables ──────
+  # DAB creates the experiment OBJECTS above; this job applies the UC binding +
+  # the load-bearing `mlflow.monitoring.sqlWarehouseId` tag. Idempotent +
+  # no-op-safe. RUN ONCE after `bundle deploy`, before live traffic (NOT
+  # auto-triggered): `databricks jobs run-now --job-id <id>`. The warehouse is
+  # the standard one, never the Reyden one: the tracing backend creates the
+  # trace tables and writes tags through it. Re-run the job if it ever changes.
+  jobs:
+    lakercm_bind_experiments:
+      name: lakercm-bind-experiments${var.name_suffix}
+      timeout_seconds: 1800
+      tasks:
+        - task_key: bind_prod
+          notebook_task:
+            notebook_path: ../../../jobs/bind_experiment_uc.py
+            source: WORKSPACE
+            base_parameters:
+              experiment_path: ${var.mlflow_experiment_path}${var.name_suffix}
+              catalog: ${var.trace_uc_catalog}
+              schema: ${var.trace_uc_schema}
+              table_prefix: ${var.prod_table_prefix}
+              warehouse_id: ${var.app_warehouse_id}
+        - task_key: bind_eval
+          depends_on:
+            - task_key: bind_prod
+          notebook_task:
+            notebook_path: ../../../jobs/bind_experiment_uc.py
+            source: WORKSPACE
+            base_parameters:
+              experiment_path: ${var.mlflow_eval_experiment_path}${var.name_suffix}
+              catalog: ${var.trace_uc_catalog}
+              schema: ${var.trace_uc_schema}
+              table_prefix: ${var.eval_table_prefix}
+              warehouse_id: ${var.app_warehouse_id}
+              # Self-test: write one synthetic trace so the fresh agent_eval_otel_*
+              # tables materialize and the binding is proven on every (re)bind.
+              smoke_trace: "true"
+      max_concurrent_runs: 1
+      email_notifications:
+        on_failure:
+          - ${var.notifications_email}
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}

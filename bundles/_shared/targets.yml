@@ -1,0 +1,100 @@
+# =============================================================================
+# LakeRCM shared target SKELETON — included by every per-domain bundle.
+# =============================================================================
+# Holds ONLY the workspace-level target context that is identical across all
+# bundles: mode, presets and root_path. Because root_path embeds
+# ${bundle.name} (which is unique per bundle), each bundle auto-namespaces its
+# own deployment + Terraform state — no collisions.
+#
+# Per-bundle target overrides (pipeline `development:` flags, event-log
+# tables, etc.) are NOT here — they live in the `targets:` block of the
+# specific bundle's own databricks.yml and deep-merge onto this skeleton. (That deep-merge of an included `targets:`
+# with a local `targets:` is validated on the first bundle; if the pinned CLI
+# doesn't merge it reliably, inline this skeleton into each databricks.yml.)
+#
+# workspace.host and workspace.profile are intentionally absent: ${var.*} is
+# not resolved before auth, so the workspace comes from the environment —
+# DATABRICKS_HOST + a token from scripts/deploy.sh or CI, or your CLI profile
+# (DATABRICKS_CONFIG_PROFILE / --profile) when you run the CLI yourself.
+# =============================================================================
+
+targets:
+  dev:
+    # Iteration target. Every deployed control-plane resource is namespaced
+    # with a "_dev" SUFFIX (var.name_suffix) — apps use "-dev" (App names reject
+    # "_") — so this dev deploy COEXISTS with prod in the SAME workspace (the CI
+    # dev workspace also hosts a laptop prod deploy). See _shared/variables.yml >
+    # name_suffix for the full what-is/isn't-suffixed list (pipelines already
+    # carry their own dev suffix).
+    #
+    # NO `mode: development`. Its "[dev <user>] " name PREFIX cannot be turned
+    # off: `presets.name_prefix: ""` counts as unset, so the prefix came back. On
+    # the CI dev workspace the schema deployed as
+    # dev_lakercm_ci_deployer_lakercm_dev and the warehouse as
+    # "[dev lakercm_ci_deployer] lakercm_sql_warehouse", while every
+    # pipeline, script and app expected lakercm_dev. The development-mode
+    # behaviors this target relies on are set explicitly instead.
+    default: true
+    presets:
+      trigger_pause_status: PAUSED    # job schedules + file-arrival triggers
+      pipelines_development: true     # the pipelines also set this per target
+    workspace:
+      root_path: "~/.bundle/${bundle.name}/${bundle.target}"
+    variables:
+      name_suffix: "_dev"
+      # Apps take "-dev" literally (App names reject "_"). The reviewer app finds
+      # the agent via ${var.agent_app_name}, so dev->dev wiring stays automatic.
+      app_name: "lakercm-dev"
+      agent_app_name: "lakercm-agent-dev"
+      # The ontobricks bundle is dev-only, so the KG tools + reviewer KG tab are
+      # on here (ontobricks_app_name resolves to lakercm-ontobricks-dev).
+      kg_enabled: "true"
+      # Unsuffixed, these collided with prod's in a shared workspace: the dev
+      # warehouse lookup resolved PROD's warehouse, and dev would have shared
+      # prod's Vector Search endpoint.
+      app_warehouse_name: "lakercm_sql_warehouse_dev"
+      rt_warehouse_name: "lakercm_rt_warehouse_dev"
+      vector_search_endpoint: "lakercm-policy-endpoint-dev"
+      # dev's own Lakebase project, declared in bundles/lakebase/resources/
+      # dev_project.yml. A branch of prod's project still shared its settings,
+      # roles and blast radius. `production` is the default branch a new
+      # project gets, with its read-write endpoint `primary`.
+      lakebase_project_id: "lakercm-dev"
+      lakebase_branch_id: "production"
+      # dev's own checkpoint group. The deploy creates it with the agent SP as a
+      # member and exports checkpoint_role_name / checkpoint_group_id from it,
+      # over CI's values: sharing prod's group would give the dev agent prod's
+      # checkpoint role, since group membership is what grants it.
+      checkpoint_group_name: "lakercm-checkpoint-runtime-dev"
+      # dev's own routing-tier model services (bundles/ai_gateway, dev only), and
+      # complexity-tiered routing ON. Both belong HERE and not in variables.yml:
+      # a default there applies to every target, and bundles/ai_gateway is
+      # targets=("dev",) — so prod has no tier services to name. Enabling it
+      # globally would deploy prod's agent app pointing at three UC model
+      # services that do not exist there, and every routed prod turn would fail.
+      # prod keeps the variables.yml defaults ("false" / "none") and its
+      # terraform-managed blend. The non-routed blend, agent_llm_endpoint,
+      # already names dev's own lakercm-agent-llm by default.
+      agent_routing_enabled: "true"
+      agent_llm_endpoint_low: "${var.catalog}.${var.lakercm_schema}.lakercm-agent-llm-low"
+      agent_llm_endpoint_med: "${var.catalog}.${var.lakercm_schema}.lakercm-agent-llm-med"
+      agent_llm_endpoint_high: "${var.catalog}.${var.lakercm_schema}.lakercm-agent-llm-high"
+      # The jobs and alerts set pause_status explicitly, which the preset above
+      # cannot override; unpaused, dev ran a 5-minute pipeline refresh and kept
+      # its warehouse awake with 5-minute alert queries.
+      schedule_pause_status: "PAUSED"
+
+  prod:
+    # Production target. No name prefixes.
+    mode: production
+    workspace:
+      root_path: /Workspace/Users/${var.user_email}/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      name_suffix: ""          # production resource names are un-suffixed
+      app_name: "lakercm"
+      agent_app_name: "lakercm-agent"
+      # Production pipeline display names drop the env suffix. These NAME vars
+      # are kept here (shared) so the pipelines bundle (producer) and the jobs
+      # bundle (lookup consumer) compute the byte-identical name.
+      medical_documents_pipeline_name: "lakercm-documents-pipeline"
+      analytics_pipeline_name: "lakercm-analytics-pipeline"

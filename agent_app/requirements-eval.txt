@@ -1,0 +1,58 @@
+# Slim requirements for the eval-loop JOBS (gepa_optimize / promote_prompt /
+# curate_dataset / rollback_prompt notebooks).
+#
+# Why this file exists: the full agent_app/requirements.txt installs cleanly in
+# the Databricks Apps runtime, but FAILS to resolve under the serverless JOBS
+# runtime's immutable-package-constraints.txt — the app-serving-only deps
+# (fastapi / uvicorn / sse-starlette and the exact-pinned, fast-moving
+# ag-ui-langgraph==0.0.35) conflict there. The eval notebooks never import any
+# of those (verified: agent/, eval/, services/ touch none of them) — they only
+# instantiate the LangGraph agent + MLflow. So the jobs install this subset.
+#
+# Keep in sync with requirements.txt for the shared deps below.
+#
+# DELIBERATELY NOT EXACT-PINNED (unlike requirements.txt, which is fully pinned
+# for the supply-chain checklist). The serverless jobs runtime resolves against
+# its own immutable-package-constraints.txt; exact `==` pins here can conflict
+# with that file and fail the install outright — which is the same class of
+# failure that keeps the app-serving deps and ag-ui-langgraph==0.0.35 out of
+# this subset. Floors let the runtime's pinned versions win. If you pin these,
+# re-validate by actually running the gepa_optimize job, not just CI.
+
+pydantic-settings>=2.0.0
+databricks-sdk>=0.70.0
+psycopg[binary]>=3.1.0
+psycopg-pool>=3.3.0
+langchain>=0.3.0
+langchain-community>=0.3.0
+langgraph>=0.2.60
+langgraph-prebuilt>=0.6.0
+langgraph-checkpoint-postgres>=2.0.10
+langchain-core>=0.3.0
+langchain-openai>=0.3.0
+# Floor only, on purpose: whatever the serverless runtime resolves must work.
+# Do not tighten this to an `==` pin (see the header note re
+# immutable-package-constraints.txt).
+#
+# The floor is 3.16 because the review-queue job (jobs/manage_review_queue.py
+# -> eval/review_queues.py) uses the mlflow.genai.labeling + label_schemas
+# Review-App API, which stabilized in 3.16. Raising it from 3.10 is required by
+# that job, not cosmetic.
+#
+# Floating ABOVE the floor stays safe: 3.11.0 removed harness._run_single and
+# split the eval harness into a _run_predict/_run_score pipeline, which silently
+# killed the None-trace backfill patch. eval/gepa_reflection.
+# patch_harness_none_trace_guard now targets BOTH shapes and returns False
+# (loudly) if neither is present.
+mlflow[databricks]>=3.16.0
+databricks-agents>=0.16.0
+httpx>=0.25.0
+# GEPA optimizer backend for mlflow.genai.optimize_prompts (GepaPromptOptimizer).
+# Not pulled in transitively by mlflow — required by jobs/gepa_optimize.py.
+# Capped to <0.2: the reflection monkeypatch (gepa.optimize swap) and the
+# gepa_kwargs forwarded in eval/optimize.py (reflection_minibatch_size,
+# raise_on_exception, stop_callbacks + gepa.utils.stop_condition.TimeoutStopCondition)
+# are validated against 0.1.x. A minor bump could rename a kwarg (unguarded
+# TypeError) or relocate gepa.optimize (silent patch no-op → the ~40-min
+# reflection hang returns), so require a human to re-validate before bumping.
+gepa>=0.1.1,<0.2

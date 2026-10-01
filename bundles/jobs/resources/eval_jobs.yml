@@ -1,0 +1,325 @@
+# =============================================================================
+# LakeRCM Eval / Prompt-Tuning Jobs
+# =============================================================================
+# Serverless notebook jobs that drive the trace-driven prompt versioning loop,
+# plus the two pipeline-refresh crons. The refresh jobs reference their target
+# pipeline by id-LOOKUP (var.documents_pipeline_id / var.analytics_pipeline_id)
+# rather than a cross-bundle ${resources.*} ref, since the pipelines now live in
+# the separate `pipelines` bundle.
+# =============================================================================
+
+resources:
+  jobs:
+    # Builds the authored, fixture-grounded golden eval dataset (agent_eval_v2).
+    lakercm_eval_dataset_gen:
+      name: lakercm-eval-dataset-gen${var.name_suffix}
+      timeout_seconds: 1800
+      tasks:
+        - task_key: generate
+          notebook_task:
+            notebook_path: ../../../jobs/generate_eval_dataset.py
+            source: WORKSPACE
+            base_parameters:
+              dataset_name: ""
+              catalog: ${var.catalog}
+              schema: ${var.lakercm_schema}
+              llm_endpoint: ${var.llm_endpoint}
+              mlflow_experiment: ${var.mlflow_eval_experiment_path}${var.name_suffix}
+              skip_scorers: "true"
+      max_concurrent_runs: 1
+      email_notifications:
+        on_failure:
+          - ${var.notifications_email}
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    lakercm_eval_curation:
+      name: lakercm-eval-curation${var.name_suffix}
+      timeout_seconds: 1800
+      tasks:
+        - task_key: curate
+          notebook_task:
+            notebook_path: ../../../jobs/curate_dataset.py
+            source: WORKSPACE
+            base_parameters:
+              days: "7"
+              max_traces: "1000"
+              init: "false"
+              catalog: ${var.catalog}
+              schema: ${var.lakercm_schema}
+              llm_endpoint: ${var.llm_endpoint}
+              # Curation READS prod traces + maintains the prod scorer schedule,
+              # so it stays on the PRODUCTION experiment.
+              mlflow_experiment: ${var.mlflow_experiment_path}${var.name_suffix}
+      schedule:
+        quartz_cron_expression: "0 0 8 ? * MON *"
+        timezone_id: "America/Los_Angeles"
+        pause_status: "${var.schedule_pause_status}"
+      max_concurrent_runs: 1
+      email_notifications:
+        on_failure:
+          - ${var.notifications_email}
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    # Opens / syncs MLflow 3 expert-feedback review queues (labeling sessions)
+    # over the agent's traces. Not scheduled — run on demand with `action`.
+    # Reads the PRODUCTION experiment (review real traffic); sync folds expert
+    # labels into the eval dataset the GEPA loop consumes.
+    lakercm_review_queue:
+      name: lakercm-review-queue${var.name_suffix}
+      timeout_seconds: 1800
+      tasks:
+        - task_key: review_queue
+          notebook_task:
+            notebook_path: ../../../jobs/manage_review_queue.py
+            source: WORKSPACE
+            base_parameters:
+              action: "list"
+              name: "lakercm-expert-review"
+              assigned_users: ""
+              filter_string: ""
+              max_traces: "50"
+              to_dataset: ""
+              catalog: ${var.catalog}
+              schema: ${var.lakercm_schema}
+              mlflow_experiment: ${var.mlflow_experiment_path}${var.name_suffix}
+              eval_dataset: ${var.agent_eval_dataset}
+      max_concurrent_runs: 1
+      email_notifications:
+        on_failure:
+          - ${var.user_email}
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    # Takes the first pass over HELD documents: records why each was held and
+    # the terminology-derived shortlist of codes that could replace the flagged
+    # one, so a reviewer opens a document that already shows both. Writes the
+    # shortlist only, never a chosen value — choosing needs the document read,
+    # which is the agent's job in the reviewer pane.
+    #
+    # Idempotent (skips documents that already have a proposal), so the
+    # half-hourly schedule is mostly a cheap no-op. It is now the only
+    # periodic cron left touching documents: embed_documents was retired
+    # when chunk indexing moved into the file-arrival path.
+    lakercm_triage_review_queue:
+      name: lakercm-triage-review-queue${var.name_suffix}
+      timeout_seconds: 3600
+      tasks:
+        - task_key: triage
+          notebook_task:
+            notebook_path: ../../../jobs/triage_review_queue.py
+            source: WORKSPACE
+            base_parameters:
+              max_docs: "500"
+              # Share withheld as the control arm, so the effect on review
+              # turnaround is measured rather than asserted. Computed and
+              # scored like any other proposal; simply never shown.
+              holdout_rate: "0.2"
+              dry_run: "false"
+              catalog: ${var.catalog}
+              schema: ${var.lakercm_schema}
+              warehouse_id: ${var.app_warehouse_id}
+              lakebase_pg_host: ${var.lakebase_pg_host}
+              lakebase_project_id: ${var.lakebase_project_id}
+              lakebase_branch_id: ${var.lakebase_branch_id}
+              lakebase_endpoint_id: ${var.lakebase_endpoint_id}
+              # No pg_user: the notebook connects to Lakebase as the RUN
+              # identity (a token authenticates only as the principal that
+              # minted it), which must hold write on document_review_proposals.
+      schedule:
+        quartz_cron_expression: "0 15/30 * * * ?"
+        timezone_id: "UTC"
+        pause_status: "${var.schedule_pause_status}"
+      max_concurrent_runs: 1
+      email_notifications:
+        on_failure:
+          - ${var.notifications_email}
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    lakercm_prompt_promotion:
+      name: lakercm-prompt-promotion${var.name_suffix}
+      timeout_seconds: 1800
+      tasks:
+        - task_key: promote
+          notebook_task:
+            notebook_path: ../../../jobs/promote_prompt.py
+            source: WORKSPACE
+            base_parameters:
+              candidate_version: ""
+              dry_run: "false"
+              catalog: ${var.catalog}
+              schema: ${var.lakercm_schema}
+              llm_endpoint: ${var.llm_endpoint}
+              mlflow_experiment: ${var.mlflow_eval_experiment_path}${var.name_suffix}
+              skip_scorers: "true"
+      max_concurrent_runs: 1
+      email_notifications:
+        on_failure:
+          - ${var.notifications_email}
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    lakercm_gepa_optimize:
+      name: lakercm-gepa-optimize${var.name_suffix}
+      timeout_seconds: 2700
+      tasks:
+        - task_key: optimize
+          notebook_task:
+            notebook_path: ../../../jobs/gepa_optimize.py
+            source: WORKSPACE
+            base_parameters:
+              reflection_model: "databricks-claude-sonnet-4-5"
+              catalog: ${var.catalog}
+              schema: ${var.lakercm_schema}
+              llm_endpoint: ${var.llm_endpoint}
+              mlflow_experiment: ${var.mlflow_eval_experiment_path}${var.name_suffix}
+              skip_scorers: "true"
+      max_concurrent_runs: 1
+      email_notifications:
+        on_failure:
+          - ${var.notifications_email}
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    lakercm_prompt_rollback:
+      name: lakercm-prompt-rollback${var.name_suffix}
+      tasks:
+        - task_key: rollback
+          notebook_task:
+            notebook_path: ../../../jobs/rollback_prompt.py
+            source: WORKSPACE
+            base_parameters:
+              to_version: ""
+              previous: "true"
+              reason: "manual_revert"
+              catalog: ${var.catalog}
+              schema: ${var.lakercm_schema}
+              mlflow_experiment: ${var.mlflow_eval_experiment_path}${var.name_suffix}
+              skip_scorers: "true"
+      max_concurrent_runs: 1
+      email_notifications:
+        on_failure:
+          - ${var.notifications_email}
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    # The single file-arrival-driven ingest job: documents pipeline, then
+    # analytics chained after it. One trigger drives both, so there is NO cron
+    # anywhere in the ingest path (the standalone 5-min analytics cron is gone).
+    # Uses ingest_trigger_pause_status (UNPAUSED on dev AND prod), NOT
+    # schedule_pause_status, so dev processes drops exactly like prod while the
+    # cost-gating periodic crons stay paused in dev.
+    lakercm_documents_refresh:
+      name: lakercm-documents-refresh${var.name_suffix}
+      tasks:
+        - task_key: refresh
+          pipeline_task:
+            pipeline_id: ${var.documents_pipeline_id}
+            full_refresh: false
+          # Transient platform blips (AI Function Registry UNAVAILABLE/CANCELLED,
+          # UC 504, "pipeline cluster not reachable") fail the update and fire a
+          # failure email; retry within the same run so they self-heal silently.
+          max_retries: 2
+          min_retry_interval_millis: 120000
+        # Analytics runs after documents extraction completes, so fact_review /
+        # fact_document_processing / fact_agent_proposal recompute on the same
+        # file-arrival signal. The OTHER analytics signal — reviews/proposals
+        # from the app — is covered by the app triggering this pipeline on
+        # review-submit / proposal-disposition (no file-arrival can represent a
+        # human review). Between the two, analytics stays fresh with no cron.
+        - task_key: refresh_analytics
+          depends_on:
+            - task_key: refresh
+          # ALL_DONE, not the default ALL_SUCCESS: a transient documents-refresh
+          # failure should not also starve analytics of a refresh over the rows
+          # that did land.
+          run_if: ALL_DONE
+          pipeline_task:
+            pipeline_id: ${var.analytics_pipeline_id}
+            full_refresh: false
+          max_retries: 2
+          min_retry_interval_millis: 120000
+        # Embeds silver_doc_chunks (the pipeline's ai_prep_search branch) into
+        # Lakebase public.document_chunks for the agent's document search. Rides
+        # this job's file-arrival trigger instead of carrying a cron of its own:
+        # chunks are only ever stale because new documents landed, which is
+        # exactly the signal above. Runs beside refresh_analytics (no dependency
+        # between them) since chunks come off bronze, not gold.
+        - task_key: load_chunks
+          depends_on:
+            - task_key: refresh
+          # ALL_DONE for the same reason as refresh_analytics: index the chunks
+          # that did land rather than starving search on a transient blip.
+          run_if: ALL_DONE
+          notebook_task:
+            notebook_path: ../../../jobs/load_document_chunks.py
+            source: WORKSPACE
+            base_parameters:
+              batch_size: "128"
+              max_docs: "5000"
+              full_refresh: "false"
+              catalog: ${var.catalog}
+              schema: ${var.lakercm_schema}
+              lakebase_pg_host: ${var.lakebase_pg_host}
+              lakebase_project_id: ${var.lakebase_project_id}
+              lakebase_branch_id: ${var.lakebase_branch_id}
+              lakebase_endpoint_id: ${var.lakebase_endpoint_id}
+              # NO pg_user. It named the reviewer SP, because migration 000034
+              # grants it the INSERT/UPDATE/DELETE the per-document replace needs
+              # -- but this job runs as the DEPLOYER SP, and the Lakebase
+              # credential the task mints belongs to whoever it runs as. Postgres
+              # rejected the mismatch outright ("OAuth: User is not authorized"),
+              # so the task failed every attempt and no chunk was ever indexed.
+              # The loader now connects as its own identity; re-add this only to
+              # name a role the run-as principal is a MEMBER of.
+          max_retries: 2
+          min_retry_interval_millis: 120000
+      # File-arrival trigger: fires ~90s after files stop landing in the input
+      # volume (external/bulk drops + a finished generation run debounce into a
+      # single update; each new file resets the timer). The reviewer app's
+      # per-upload pipelines.start_update() still covers the instant single-doc
+      # path. wait_after_last_change_seconds MUST be > 60 -- the Jobs API rejects
+      # anything lower with "Invalid trigger waitAfterLastChangeSeconds".
+      trigger:
+        pause_status: "${var.ingest_trigger_pause_status}"
+        file_arrival:
+          url: ${var.documents_input_volume_path}
+          min_time_between_triggers_seconds: 60
+          wait_after_last_change_seconds: 90
+      max_concurrent_runs: 1
+      email_notifications:
+        on_failure:
+          - ${var.notifications_email}
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+
+    # Analytics pipeline as a MANUAL, on-demand job (no schedule, no trigger).
+    # The event-driven refresh is chained into lakercm_documents_refresh above
+    # and triggered by the app on review actions; this remains only for an
+    # operator to force a recompute by hand. It intentionally carries no cron.
+    lakercm_analytics_refresh:
+      name: lakercm-analytics-refresh${var.name_suffix}
+      tasks:
+        - task_key: refresh
+          pipeline_task:
+            pipeline_id: ${var.analytics_pipeline_id}
+            full_refresh: false
+          max_retries: 2
+          min_retry_interval_millis: 120000
+      max_concurrent_runs: 1
+      email_notifications:
+        on_failure:
+          - ${var.notifications_email}
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}

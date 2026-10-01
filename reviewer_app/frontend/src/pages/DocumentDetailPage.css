@@ -1,0 +1,861 @@
+.detail-page {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - var(--header-height, 72px));
+  background: var(--neutral-50, #f9fafb);
+
+  /* Single source of truth for the assistant drawer's width. The drawer itself
+     is position: fixed, so it cannot participate in this page's layout and
+     cannot push anything on its own — the page has to make room for it. It is
+     rendered INSIDE .detail-page, so it inherits this variable and reads the
+     same number; declaring the width in both files is how the drawer and the
+     gap it needs drift apart. */
+  --assistant-width: min(420px, 92vw);
+}
+
+/* Assistant open: reflow, do not cover.
+
+   The drawer used to sit on top of the review pane at z-index 50, which hid the
+   extracted values a reviewer needs while they are talking to the assistant
+   ABOUT those values. Shifting the content instead keeps both readable at once.
+
+   padding-right on the page, not margin or a width change: .detail-page is the
+   flex column that owns the page's scroll height, and narrowing it would make
+   every descendant recompute its own width against a new container. Padding
+   leaves the box model alone and just reserves the gutter.
+
+   ConnectionLine needs no help here. It drives a requestAnimationFrame loop
+   while a line is visible — its own comment records that discrete scroll +
+   ResizeObserver triggers "went stale during the gaps" — so it tracks the
+   transition frame by frame rather than needing a synthetic resize event. */
+.detail-page--assistant-open {
+  padding-right: var(--assistant-width);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .detail-page {
+    transition: padding-right 180ms ease-out;
+  }
+
+  /* Suppressed mid-drag. The transition is right for open/close, but during a
+     resize every mousemove would animate padding-right over 180ms and the gutter
+     visibly lags the cursor and rubber-bands. Reduced-motion users have no
+     transition to suppress, so this sits inside the same query. */
+  .detail-page--resizing {
+    transition: none;
+  }
+}
+
+/* Below the drawer's own 92vw cap there is no room to reflow into: the gutter
+   would be wider than what is left of the page. Let it overlay there, which is
+   the correct behaviour on a phone and matches how the drawer already sizes
+   itself. */
+@media (max-width: 720px) {
+  .detail-page--assistant-open {
+    padding-right: 0;
+  }
+}
+
+/* Loading */
+.detail-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 16px;
+  color: var(--neutral-600, #4b5563);
+  font-family: var(--font-body, sans-serif);
+  font-size: 16px;
+}
+
+.detail-loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid var(--neutral-200, #e5e7eb);
+  border-top-color: var(--primary-500, #3b82f6);
+  border-radius: 50%;
+  animation: detailSpin 0.8s linear infinite;
+}
+
+@keyframes detailSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Error */
+.detail-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  text-align: center;
+  gap: 12px;
+  padding: 40px;
+}
+
+.detail-error-icon {
+  font-size: 64px;
+  opacity: 0.6;
+}
+
+.detail-error h2 {
+  font-family: var(--font-display, sans-serif);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--neutral-900, #111827);
+  margin: 0;
+}
+
+.detail-error p {
+  font-family: var(--font-body, sans-serif);
+  font-size: 16px;
+  color: var(--neutral-600, #4b5563);
+  margin: 0;
+  max-width: 400px;
+}
+
+.btn-back-error {
+  margin-top: 12px;
+  padding: 12px 24px;
+  background: var(--primary-500, #3b82f6);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-family: var(--font-body, sans-serif);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-back-error:hover {
+  background: var(--primary-600, #2563eb);
+  transform: translateY(-1px);
+}
+
+/* Header */
+.detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--neutral-200, #e5e7eb);
+  background: var(--surface-raised);
+  flex-shrink: 0;
+}
+
+.detail-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  min-width: 0;
+}
+
+.btn-back {
+  padding: 8px 16px;
+  background: var(--neutral-100, #f3f4f6);
+  border: 1px solid var(--neutral-300, #d1d5db);
+  border-radius: 8px;
+  font-family: var(--font-body, sans-serif);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--neutral-700, #374151);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-back:hover {
+  background: var(--neutral-200, #e5e7eb);
+  color: var(--neutral-900, #111827);
+}
+
+.detail-title {
+  font-family: var(--font-display, sans-serif);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--neutral-900, #111827);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-type-badge {
+  padding: 4px 12px;
+  background: var(--primary-100, #dbeafe);
+  color: var(--primary-700, #1d4ed8);
+  border-radius: 6px;
+  font-family: var(--font-body, sans-serif);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.detail-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Queue navigation: prev/next chips next to the page count.
+   Reads as "12 / 47" — reviewer orients themselves at a glance. */
+.detail-queue-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--neutral-50, #fafaf9);
+  border: 1px solid var(--color-border, #e7e5e4);
+  border-radius: var(--radius-md, 8px);
+  margin-right: 4px;
+}
+
+.btn-queue-nav {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--neutral-700, #44403c);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all var(--transition-fast, 150ms ease);
+}
+
+.btn-queue-nav:hover:not(:disabled) {
+  background: var(--primary-50, #eff6ff);
+  color: var(--primary-700, #1d4ed8);
+}
+
+.btn-queue-nav:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.detail-queue-pos {
+  font-family: var(--font-body, sans-serif);
+  font-size: var(--text-xs, 12px);
+  color: var(--neutral-700, #44403c);
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+  min-width: 50px;
+  text-align: center;
+}
+
+.detail-queue-pos strong {
+  font-weight: var(--font-semibold, 600);
+  color: var(--neutral-900, #1c1917);
+}
+
+.detail-queue-sep {
+  margin: 0 3px;
+  color: var(--neutral-400, #a8a29e);
+}
+
+/* Hotkey help overlay — modal above the page content */
+.detail-help-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.detail-help-card {
+  background: var(--surface-raised);
+  border-radius: var(--radius-xl, 16px);
+  box-shadow: var(--shadow-xl, 0 20px 50px -10px rgba(0, 0, 0, 0.25));
+  max-width: 460px;
+  width: 92%;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 0;
+  animation: slideUp 0.2s ease-out;
+}
+
+.detail-help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-5, 20px) var(--space-6, 24px) var(--space-3, 12px);
+  border-bottom: 1px solid var(--color-border, #e7e5e4);
+}
+
+.detail-help-title {
+  font-family: var(--font-display, sans-serif);
+  font-size: var(--text-lg, 18px);
+  font-weight: var(--font-semibold, 600);
+  color: var(--neutral-900, #1c1917);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.detail-help-close {
+  background: transparent;
+  border: none;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--neutral-500, #78716c);
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: var(--radius-md, 8px);
+  transition: all var(--transition-fast, 150ms ease);
+}
+
+.detail-help-close:hover {
+  background: var(--neutral-100, #f5f5f4);
+  color: var(--neutral-900, #1c1917);
+}
+
+.detail-help-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-4, 16px) var(--space-6, 24px);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2, 10px) var(--space-6, 24px);
+}
+
+.detail-help-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  font-family: var(--font-body, sans-serif);
+  font-size: var(--text-sm, 14px);
+  color: var(--neutral-700, #44403c);
+}
+
+.detail-help-list kbd,
+.detail-help-foot kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  background: var(--neutral-100, #f5f5f4);
+  border: 1px solid var(--color-border, #e7e5e4);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm, 4px);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 11px;
+  font-weight: var(--font-semibold, 600);
+  color: var(--neutral-800, #292524);
+  white-space: nowrap;
+}
+
+.detail-help-foot {
+  margin: 0;
+  padding: var(--space-3, 12px) var(--space-6, 24px) var(--space-5, 20px);
+  border-top: 1px solid var(--color-border, #e7e5e4);
+  font-size: var(--text-xs, 13px);
+  color: var(--neutral-600, #57534e);
+  line-height: 1.5;
+}
+
+.detail-help-foot kbd {
+  margin: 0 2px;
+}
+
+.detail-header-right .btn-header-action {
+  padding: 8px 16px;
+  background: var(--surface-raised);
+  border: 1px solid var(--neutral-300, #d1d5db);
+  border-radius: 8px;
+  font-family: var(--font-body, sans-serif);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--neutral-700, #374151);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.detail-header-right .btn-header-action:hover {
+  background: var(--neutral-50, #f9fafb);
+  border-color: var(--primary-300, #93c5fd);
+  color: var(--primary-700, #1d4ed8);
+}
+
+/* Main Content */
+.detail-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.detail-content.with-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.detail-content.full-width {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Top row: image (left) | extracted data (right) */
+.detail-top-row {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
+
+/* Image Area */
+.detail-image-area {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: auto;
+  background: var(--neutral-100, #f3f4f6);
+  padding: 24px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  /* Positioned anchor for the absolutely-placed InspectorCard sibling — the
+     card sticks to the top-right of the document viewport instead of
+     following the cursor. */
+  position: relative;
+}
+
+/* Extracted data panel — right side of top row */
+.detail-data-panel {
+  flex: 0 0 auto;
+  min-width: 300px;
+  max-width: 70%;
+  border-left: 1px solid var(--neutral-200, #e5e7eb);
+  background: #f7f8fa;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Vertical resizer between image and data panel */
+.detail-vertical-resizer {
+  flex: 0 0 auto;
+  width: 8px;
+  background: var(--neutral-100, #f3f4f6);
+  border-left: 1px solid var(--neutral-200, #e5e7eb);
+  border-right: 1px solid var(--neutral-200, #e5e7eb);
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.detail-vertical-resizer:hover {
+  background: var(--neutral-200, #e5e7eb);
+}
+
+.detail-vertical-resizer-grip {
+  width: 3px;
+  height: 36px;
+  border-radius: 2px;
+  background: var(--neutral-400, #9ca3af);
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+}
+
+.detail-vertical-resizer:hover .detail-vertical-resizer-grip {
+  opacity: 0.8;
+}
+
+/* Collapse-toggle chevron pinned to the resizer. Hidden until the user
+   hovers the resizer so the resize affordance stays primary; click toggles
+   the panel via setShowPanel(false). */
+.detail-vertical-resizer-toggle {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--neutral-200, #e5e7eb);
+  border-radius: 50%;
+  background: var(--surface-raised);
+  color: var(--neutral-600, #4b5563);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.15s ease,
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.detail-vertical-resizer:hover .detail-vertical-resizer-toggle {
+  opacity: 1;
+}
+
+.detail-vertical-resizer-toggle:hover {
+  background: var(--primary-50, #eff6ff);
+  border-color: var(--primary-300, #93c5fd);
+  color: var(--primary-700, #1d4ed8);
+}
+
+.detail-vertical-resizer-toggle:active {
+  transform: scale(0.9);
+}
+
+/* Floating "expand panel" handle visible only when the panel is collapsed.
+   Anchored to the right edge of the document image area so the reviewer
+   can find the panel without searching the toolbar. */
+.detail-panel-restore {
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 64px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--neutral-200, #e5e7eb);
+  border-right: none;
+  border-radius: 8px 0 0 8px;
+  background: var(--surface-raised);
+  color: var(--neutral-600, #4b5563);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 5;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+  box-shadow: -1px 0 4px rgba(0, 0, 0, 0.04);
+}
+
+.detail-panel-restore:hover {
+  background: var(--primary-50, #eff6ff);
+  border-color: var(--primary-300, #93c5fd);
+  color: var(--primary-700, #1d4ed8);
+}
+
+/* Review panel pinned to bottom */
+.detail-review-panel {
+  flex: 0 0 auto;
+  min-height: 140px;
+  background: var(--surface-raised);
+  /* The two halves scroll independently now, so the panel itself must not. A
+     single outer scrollbar would scroll the verdict and the notes together and
+     defeat the point of putting them side by side. */
+  overflow: hidden;
+  border-top: 1px solid var(--neutral-200, #e5e7eb);
+}
+
+/* Verdict left, notes right. Even halves by default; the reviewer can still
+   resize the whole panel vertically with the existing horizontal grip. */
+.detail-review-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 100%;
+  min-height: 0;
+}
+
+/* min-height/min-width: 0 on both halves is what allows them to shrink inside
+   the grid. Without it a long verdict list or a long note forces the track wider
+   than its share and the split stops being even. */
+.detail-review-left,
+.detail-review-right {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.detail-review-right {
+  border-left: 1px solid var(--neutral-200, #e5e7eb);
+  /* The notes pane manages its own internal scrolling (textarea vs rendered
+     preview), so it must not get a second scrollbar from this track. */
+  overflow-y: hidden;
+}
+
+/* Narrow: stack them, verdict first. Side-by-side halves below roughly 900px
+   leave neither pane wide enough to read a code and its description on one line. */
+@media (max-width: 900px) {
+  .detail-review-split {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+  }
+
+  .detail-review-panel {
+    overflow-y: auto;
+  }
+
+  .detail-review-right {
+    border-left: 0;
+    border-top: 1px solid var(--neutral-200, #e5e7eb);
+    min-height: 180px;
+  }
+}
+
+.detail-image-wrapper {
+  transition: transform 0.2s ease;
+  max-width: 100%;
+}
+
+.detail-image-container {
+  position: relative;
+  background: var(--surface-raised);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  overflow: hidden;
+  display: inline-block;
+}
+
+.detail-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* Image Error Fallback */
+.detail-image-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 40px;
+  text-align: center;
+  min-height: 300px;
+}
+
+.detail-image-error-icon {
+  font-size: 64px;
+  opacity: 0.5;
+  margin-bottom: 16px;
+}
+
+.detail-image-error-title {
+  font-family: var(--font-display, sans-serif);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--neutral-800, #1f2937);
+  margin: 0 0 8px 0;
+}
+
+.detail-image-error-subtitle {
+  font-family: var(--font-body, sans-serif);
+  font-size: 14px;
+  color: var(--neutral-500, #6b7280);
+  margin: 0 0 20px 0;
+  max-width: 320px;
+}
+
+.btn-retry-image {
+  padding: 10px 24px;
+  background: var(--primary-500, #3b82f6);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-family: var(--font-body, sans-serif);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-retry-image:hover {
+  background: var(--primary-600, #2563eb);
+  transform: translateY(-1px);
+}
+
+/* Resize handle between image and panel */
+.detail-resize-handle {
+  flex-shrink: 0;
+  height: 8px;
+  background: var(--neutral-100, #f3f4f6);
+  border-top: 1px solid var(--neutral-200, #e5e7eb);
+  border-bottom: 1px solid var(--neutral-200, #e5e7eb);
+  cursor: row-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.detail-resize-handle:hover {
+  background: var(--neutral-200, #e5e7eb);
+}
+
+.detail-resize-grip {
+  width: 36px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--neutral-400, #9ca3af);
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+}
+
+.detail-resize-handle:hover .detail-resize-grip {
+  opacity: 0.8;
+}
+
+/* Extraction Panel — bottom drawer */
+.detail-panel {
+  width: 100%;
+  max-height: 45vh;
+  min-height: 100px;
+  border-left: none;
+  overflow-y: auto;
+  background: var(--surface-raised);
+  flex-shrink: 0;
+}
+
+/* Footer */
+.detail-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  border-top: 1px solid var(--neutral-200, #e5e7eb);
+  background: var(--surface-raised);
+  flex-shrink: 0;
+}
+
+.detail-footer-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.detail-status-badge {
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-family: var(--font-body, sans-serif);
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.detail-status-badge[data-status="processing"] {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.detail-status-badge[data-status="pending"] {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.detail-status-badge[data-status="reviewed"] {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.detail-status-badge[data-status="auto_verified"] {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.detail-status-badge[data-status="failed"] {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.btn-footer-control {
+  width: 36px;
+  height: 36px;
+  background: var(--neutral-100, #f3f4f6);
+  border: 1px solid var(--neutral-300, #d1d5db);
+  border-radius: 8px;
+  font-size: 16px;
+  color: var(--neutral-700, #374151);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-footer-control:hover:not(:disabled) {
+  background: var(--primary-50, #eff6ff);
+  border-color: var(--primary-400, #60a5fa);
+  color: var(--primary-600, #2563eb);
+}
+
+.btn-footer-control:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.detail-zoom-indicator {
+  font-family: var(--font-body, sans-serif);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--neutral-700, #374151);
+  min-width: 60px;
+  text-align: center;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.detail-zoom-indicator:hover {
+  background: var(--neutral-200, #e5e7eb);
+}
+
+.detail-keyboard-hints {
+  gap: 16px;
+}
+
+.detail-hint {
+  font-family: var(--font-body, sans-serif);
+  font-size: 12px;
+  color: var(--neutral-500, #6b7280);
+  padding: 4px 8px;
+  background: var(--neutral-100, #f3f4f6);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .detail-keyboard-hints {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .detail-panel {
+    max-height: 50vh;
+  }
+
+  .detail-header {
+    padding: 12px 16px;
+  }
+
+  .detail-title {
+    font-size: 16px;
+  }
+
+  .detail-header-right .btn-header-action span {
+    display: none;
+  }
+
+  .detail-footer-section:last-child {
+    display: none;
+  }
+}

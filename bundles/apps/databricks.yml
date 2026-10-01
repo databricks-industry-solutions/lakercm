@@ -1,0 +1,65 @@
+# =============================================================================
+# LakeRCM — Apps bundle
+# =============================================================================
+# Reviewer + agent Databricks Apps. Co-located because they share the app-roll
+# mechanic (`databricks bundle run <app_key>` — the ONLY sanctioned roll; a
+# raw `apps deploy` drops the bundle-managed deployment env) and the
+# SP-sync/role/grant post-steps. App env/command live in the app resources'
+# `config:` blocks (resources/*.yml); cross-bundle ids resolve via the local
+# lookup vars below. Deploys after foundation/lakebase/pipelines so the
+# lookups + ${var.lakebase_pg_host} resolve against live resources.
+#
+# sync.paths -> repo root so ../../../reviewer_app and ../../../agent_app source
+# dirs are in sync scope.
+# =============================================================================
+
+bundle:
+  name: lakercm-apps
+  # No `engine:` pin: this deploys on the CLI's default direct engine, like the
+  # other bundles. It was pinned to terraform (42acce3) because direct-engine app
+  # updates sent `forward_user_access_token` in the update mask and got a 400,
+  # a CLI 1.14.1 regression that 1.15.0 fixed (databricks/cli#6510);
+  # scripts/deploy_all.py requires 1.15.0 for this bundle. On CI the pin could
+  # not work at all: terraform could not initialize on the CI runner. A target
+  # whose apps state is still
+  # terraform deploys on terraform once more, and the CLI then migrates that
+  # state to the direct engine.
+
+include:
+  - ../_shared/variables.yml
+  - ../_shared/targets.yml
+  - resources/*.yml
+
+variables:
+  # Local lookups (the CLI eagerly resolves every declared lookup, so these
+  # live HERE, not in _shared/variables.yml — see the note there). They feed
+  # the reviewer app's bundle-managed env (config.env / value_from), replacing
+  # the old cross-bundle app_vars.json export. Producers (foundation,
+  # pipelines) deploy before apps in scripts/bundle_registry.py order.
+  app_warehouse_id:
+    description: "ID of the bundle-managed standard SQL warehouse (resolved by name)"
+    lookup:
+      warehouse: ${var.app_warehouse_name}
+  rt_warehouse_id:
+    description: "ID of the bundle-managed Reyden (Lakehouse//RT) warehouse (resolved by name)"
+    lookup:
+      warehouse: ${var.rt_warehouse_name}
+  documents_pipeline_id:
+    description: "ID of the documents DLT pipeline (resolved by name)"
+    lookup:
+      pipeline: ${var.medical_documents_pipeline_name}
+  analytics_pipeline_id:
+    description: "ID of the analytics DLT pipeline (resolved by name). The reviewer app triggers it on review-submit / proposal-disposition so review analytics refresh event-driven, no cron."
+    lookup:
+      pipeline: ${var.analytics_pipeline_name}
+
+sync:
+  paths:
+    - ../..
+  # Force-include the gitignored built frontend — without it the reviewer pod
+  # boots with no UI. Path is relative to this bundle root (bundles/apps), so
+  # ../../ reaches the repo root. The app.yaml files are NOT listed: they're
+  # minimal static committed files, synced normally (env/command come from the
+  # app resources' `config:` blocks).
+  include:
+    - ../../reviewer_app/frontend/dist/**

@@ -1,0 +1,492 @@
+# =============================================================================
+# LakeRCM Bundle Variables — SHARED across all per-domain bundles
+# =============================================================================
+# This is the single source of truth for the variable catalog. Every bundle
+# (bundles/<domain>/databricks.yml) includes this file via a relative
+# `include:`. It is intentionally a SUPERSET — a given bundle only consumes a
+# subset, and DAB tolerates declared-but-unused variables.
+#
+# Variables are organised into three groups:
+#
+#   1. Required (no default)  — must be injected per-target via:
+#                                 - BUNDLE_VAR_<name> env var, OR
+#                                 - <bundle>/.databricks/bundle/<target>/variable-overrides.json
+#                                The bundle deploy errors out if any of these
+#                                resolve to empty.
+#
+#   2. Lookup variables       — resolved by name at deploy time from existing
+#                                workspace resources. These are what make the
+#                                multi-bundle split work: cross-bundle
+#                                ${resources.*} refs are impossible, so a
+#                                resource id produced by one bundle is consumed
+#                                by another via a name lookup.
+#
+#   3. Generic with default   — workspace-portable values.
+#
+# Laptop:  ~/.lakercm/<target>.env, sourced by scripts/deploy.sh
+#          (template: .env.example; see docs/local-dev-setup.md).
+# CI:      GitHub Environment variables, exported as BUNDLE_VAR_* by
+#          scripts/export_bundle_vars.py.
+# =============================================================================
+
+variables:
+
+  workspace_host:
+    description: "Workspace host URL"
+
+  catalog:
+    description: "Unity Catalog name where the schema, volumes, and tables live"
+
+  user_email:
+    description: "Email for resource OWNERSHIP + deployer identity (run-as, permissions, parent_path, workspace root_path). Operational notifications route to notifications_email, which defaults back to this."
+
+  notifications_email:
+    description: "Recipient for operational alert/job/pipeline email. Decoupled from user_email (the owner/deployer identity) so pages can target a team alias/DL without changing resource ownership, and so each environment routes independently. Set BUNDLE_VAR_notifications_email per target; defaults to user_email so any environment works unconfigured."
+    default: ${var.user_email}
+
+  alert_notification_destination_id:
+    description: "Optional Databricks Notification Destination ID (Slack / PagerDuty / email group) for alert + job routing. Empty = email only. Wire per-target via the opt-in override documented in docs/plans/monitoring-email-flood-hotfix-handoff.md."
+    default: ""
+
+  lakebase_pg_host:
+    description: "Lakebase Postgres endpoint hostname. Auto-corrected after first deploy by the deploy orchestrator (scripts/deploy_all.py) if drift is detected."
+
+  llm_endpoint:
+    description: "Foundation Model serving endpoint the eval, curation, GEPA and promotion jobs run the agent against, and the reviewer app may query. A Databricks-hosted pay-per-token endpoint, so the default works in any workspace that serves it. Override per-target only if a target lacks it."
+    default: "databricks-claude-opus-4-7"
+
+  transcription_endpoint:
+    description: "Multimodal FM serving endpoint for speech-to-text (accepts an OpenAI-compatible audio_url content block). Default validated live on AWS and Azure workspaces. Override per-target only if a target lacks it."
+    default: "databricks-gemini-3-5-flash"
+
+  gepa_reflection_model:
+    description: "Foundation Model serving endpoint GEPA prompt optimization reflects with. A Databricks-hosted pay-per-token endpoint; override per-target only if a target lacks it."
+    default: "databricks-claude-sonnet-4-5"
+
+  synthetic_data_model:
+    description: "Foundation Model serving endpoint the synthetic document generator (synthetic_data/) writes each document's narrative with. Override per-target only if a target lacks it; databricks-llama-4-maverick is the generator the public-release policy lists."
+    default: "databricks-claude-opus-5-5"
+
+  # ---------------------------------------------------------------------------
+  # Agent LLM — Unity AI Gateway model service
+  #   (consumed by bundles/apps/resources/agent_app.yml)
+  # ---------------------------------------------------------------------------
+  # The AGENT app queries a UC-native **model service** on the Unity AI Gateway
+  # (NOT a classic serving endpoint — there is no DAB/CLI resource type for model
+  # services yet, so it is created + tuned in the AI Gateway UI and documented in
+  # AGENTS.md > "Agent gateway model service"). It fans traffic evenly across
+  # several native FM destinations in one Primary routing group, with a fallback
+  # group, usage tracking, and an inference (payload) table
+  # (<catalog>.<schema>.lakercm_agent_llm_payload) — see the model-service
+  # config artifact for the exact destination roster + weights. The agent queries
+  # it via the gateway /responses API (var.agent_llm_use_responses_api) with ONE
+  # uniform reasoning effort (var.agent_llm_effort) that the gateway normalizes
+  # per destination — the only way a single knob drives reasoning across
+  # heterogeneous destinations (some require the Responses API to tool-call while
+  # reasoning; some reject a shared reasoning param on /chat/completions). Session
+  # affinity pins each conversation to one destination for prefix-cache reuse +
+  # a consistent voice — the app sends the `x-session-affinity: <thread_id>`
+  # header (see agent/llm.py). No token secret — native pay-per-token destinations
+  # need no wrapped credential. The reviewer app (var.llm_endpoint) + GEPA
+  # (var.gepa_reflection_model) still use bare FM endpoints on /serving-endpoints,
+  # unchanged. The exact destination set + weights live in the model-service
+  # config artifact (bundles/apps/resources/model_service.config.json), managed as
+  # code (see AGENTS.md > "Agent gateway model service").
+  agent_llm_endpoint:
+    description: "Fully-qualified UC name (catalog.schema.name) of the Unity AI Gateway model service the agent app queries — portable across targets via var.catalog. Carried to the app as the LLM_ENDPOINT env (ChatOpenAI `model`)."
+    default: "${var.catalog}.${var.lakercm_schema}.lakercm-agent-llm"
+  agent_llm_base_path:
+    description: "URL path the agent's OpenAI-compatible client posts to (it appends /chat/completions or /responses). The Unity AI Gateway model-service route; workspace-agnostic. Carried to the app as the LLM_BASE_PATH env."
+    default: "/ai-gateway/mlflow/v1"
+  agent_llm_effort:
+    description: "Reasoning effort sent to the agent LLM (Responses API reasoning.effort). The gateway normalizes one uniform effort across every destination model. One of: none|low|medium|high|max. Carried to the app as LLM_EFFORT."
+    default: "high"
+  agent_llm_use_responses_api:
+    description: "Route agent LLM calls via the gateway /responses API (true) vs legacy /chat/completions (false). /responses is required for uniform reasoning across the blend and for gpt-5-6-sol tool-calling. Carried to the app as LLM_USE_RESPONSES_API."
+    default: "true"
+
+  # ---------------------------------------------------------------------------
+  # Complexity-tiered model routing (feature-flagged; default OFF)
+  #   (consumed by bundles/apps/resources/agent_app.yml)
+  # ---------------------------------------------------------------------------
+  # Route each conversation to a low/med/high model+effort tier chosen once at
+  # conversation start and pinned — the Databricks Smart-Routing pattern
+  # (classify once, pick the cheapest Pareto-frontier point that clears the
+  # task). OFF → today's single-endpoint blend, byte-for-byte. Phase 1 (no new
+  # infra) varies ONLY reasoning_effort on the existing blend; Phase 2 also sets
+  # the per-tier model-service endpoints below once those gateway services are
+  # applied. See docs/complexity-tiered-model-routing.md.
+  agent_routing_enabled:
+    description: "Master switch for complexity-tiered routing. false → the agent uses the single agent_llm_endpoint blend at agent_llm_effort (unchanged). Carried to the app as LLM_ROUTING_ENABLED."
+    default: "false"
+  agent_routing_default_tier:
+    description: "Tier used when the classifier errors/times out or the pin store is unavailable. Emitted with a routing.source=default_on_error trace tag + alert — never a silent downgrade. One of: low|med|high. Carried as LLM_ROUTING_DEFAULT_TIER."
+    default: "med"
+  agent_classifier_endpoint:
+    description: "FM serving endpoint that classifies conversation complexity (a plain /serving-endpoints model, NOT the gateway blend). GPT-5.6 Luna — the fast, cost-efficient GPT-5.6 model. Carried as LLM_CLASSIFIER_ENDPOINT; the agent SP is granted CAN_QUERY via the classifier-endpoint app resource."
+    default: "databricks-gpt-5-6-luna"
+  agent_classifier_effort:
+    description: "Reasoning effort for the classifier call. Luna accepts none|low|medium|high|xhigh (NOT minimal; anything else is coerced to medium). Measured 2026-09-23: medium spends 0 reasoning tokens on ordinary routing messages (~0.9s) and ~75 on reasoning-heavy ones (~1.5s). Empty omits the parameter (needed for a Claude classifier). Carried as LLM_CLASSIFIER_EFFORT."
+    default: "medium"
+  agent_classifier_timeout_seconds:
+    description: "Timeout (seconds) for the complexity-classifier call, which sits on the pre-first-token path of a new conversation. Fail fast — the default tier is cheap and observable. Applied per attempt (one retry). Carried as LLM_CLASSIFIER_TIMEOUT_SECONDS."
+    default: "3"
+  agent_routing_pin_ttl_seconds:
+    description: "Shelf life (seconds) of a thread->tier pin. Upward-only re-pinning still holds within the window; past it the next turn re-decides, so a single escalation cannot hold a long-lived thread at the most expensive tier forever. 0 disables expiry. Carried as LLM_ROUTING_PIN_TTL_SECONDS."
+    default: "1800"
+  agent_llm_endpoint_low:
+    description: "Phase 2: fully-qualified UC name of the LOW-tier gateway model service (80/20 GPT-6 Luna / GLM-5.3 Flash, falling back to DeepSeek V4 Flash; no model is shared between tiers), declared in bundles/ai_gateway/resources/model_services.yml (dev only). \"none\" → LOW resolves exactly like MED (the agent reads \"none\" as unset; an app env var cannot be empty, the Apps deployment API rejects it). Set to ${var.catalog}.${var.lakercm_schema}.lakercm-agent-llm-low to activate. Carried as LLM_ENDPOINT_LOW."
+    default: "none"
+  agent_llm_endpoint_med:
+    description: "Phase 2: fully-qualified UC name of the MED-tier gateway model service (80/20 GPT-6 Sol / Kimi K3, falling back to Gemini 3.8 Flash), declared in bundles/ai_gateway/resources/model_services.yml (dev only). \"none\" → use the existing blend (agent_llm_endpoint) and vary only effort. Set to ${var.catalog}.${var.lakercm_schema}.lakercm-agent-llm-med to activate (deterministic name; the service lives in another bundle and DABs has no cross-bundle resource references). Carried as LLM_ENDPOINT_MED."
+    default: "none"
+  agent_llm_endpoint_high:
+    description: "Phase 2: fully-qualified UC name of the HIGH-tier gateway model service (80/20 Claude Opus 5.5 / GPT-6 Astra, falling back to Grok 4.6), declared in bundles/ai_gateway/resources/model_services.yml (dev only). \"none\" → use the existing blend. Set to ${var.catalog}.${var.lakercm_schema}.lakercm-agent-llm-high to activate. Carried as LLM_ENDPOINT_HIGH."
+    default: "none"
+  agent_effort_low:
+    description: "Reasoning effort for the low tier. Only ever sent to a dedicated low-tier service: routing clamps none/low to medium on the blend in code. OpenAI's guidance for low: efficient reasoning for tool-use/search/multi-step decisions while optimizing for speed and cost. Eval-gate tool-calling reliability before relying on it. The gateway maps effort per provider, and a mapping can reject the agent's 2000-token output cap: Claude Haiku 4.5 at low gets a 4096-token thinking budget and 400s. Re-run scripts/probe_tier_destinations.py after changing it. Carried as LLM_EFFORT_LOW."
+    default: "low"
+  agent_effort_med:
+    description: "Reasoning effort for the med tier. GPT-5.5's measured Pareto point on the Databricks coding-agent benchmark is at medium (83% at ~$0.88/task; high and xhigh scored LOWER). Never none/low on the blend (clamped in code). Keep Zhipu and DeepSeek models out of a medium tier: medium isn't one of their native levels, and on the gateway GLM-5.3 runs it like its default max. Re-run scripts/probe_tier_destinations.py after changing it. Carried as LLM_EFFORT_MED."
+    default: "medium"
+  agent_effort_high:
+    description: "Reasoning effort for the high tier. Opus 4.8's measured Pareto points on the Databricks coding-agent benchmark: high 85% at ~$0.94/task, xhigh 90% at ~$2.21; max scored 81% at ~$3.62 (dominated) — so never max. xhigh is an eval-gated candidate. Re-run scripts/probe_tier_destinations.py after changing it. Carried as LLM_EFFORT_HIGH."
+    default: "high"
+
+  reviewer_sp_client_id:
+    description: "OAuth client_id (UUID) of the service principal that runs the reviewer app. Also used as the Postgres role name for Lakebase OAuth."
+
+  agent_sp_client_id:
+    description: "OAuth client_id (UUID) of the service principal that runs the agent app"
+
+  checkpoint_role_name:
+    description: "Lakebase Postgres role name that owns the LangGraph checkpointer tables (public.checkpoint_*) and stable agent-readable grants. Backed by a workspace group so the role outlives any individual SP — SP rotations only require re-membership, no schema migration. The agent connection sets PGUSER to this name; the SP's OAuth token is still the credential. See AGENTS.md > 'Checkpointer role setup' for the one-time workspace-group prereq."
+
+  checkpoint_group_id:
+    description: "Numeric workspace-group ID for the group that owns the Lakebase Postgres role above. Members of this group can authenticate to Postgres as ${var.checkpoint_role_name}. Look up once via 'databricks groups list -o json'."
+
+  checkpoint_group_name:
+    description: "Optional per-target workspace group for the checkpoint role. When set, the deploy (scripts/deploy_all.py: ensure_checkpoint_group) creates the group if missing, adds the agent SP as a member, and exports checkpoint_role_name / checkpoint_group_id from it, over any CI or env-file values. Empty keeps those two as provided."
+    default: ""
+
+  # ── App telemetry (OpenTelemetry) — STRICTLY OPT-IN ────────────────────────
+  # Telemetry is OFF by default so a fresh-workspace `bundle deploy` of the
+  # apps bundle succeeds with NONE of these set, and the apps boot + serve
+  # EXACTLY as they did before telemetry was added.
+  #
+  # Databricks Apps AUTO-INJECTS the OTLP collector endpoint, export protocol,
+  # OTEL_SERVICE_NAME, OTEL_RESOURCE_ATTRIBUTES (workspace.id + app.name), and
+  # batch config into the app runtime WHEN app telemetry is enabled — endpoint
+  # http://localhost:4314, protocol grpc. So we intentionally do NOT hardcode
+  # the endpoint/port/service-name/resource-attributes in bundle env; the
+  # platform owns them (and a hardcoded value would only risk overriding the
+  # platform's richer defaults). Source:
+  #   https://docs.databricks.com/aws/en/dev-tools/databricks-apps/system-env
+  #   https://docs.databricks.com/aws/en/dev-tools/databricks-apps/observability
+  # We wire only the two things the platform does NOT set: the export
+  # DESTINATIONS (opt-in) and MLflow's dual-export flag (agent).
+  #
+  # To ENABLE telemetry, override these in variable-overrides.json / BUNDLE_VAR_*
+  # (build the table names from your workspace catalog — serverless vs classic —
+  # so no catalog is committed to YAML). See docs/local-dev-setup.md.
+
+  reviewer_telemetry_export_destinations:
+    description: >-
+      Reviewer app OTLP -> Unity Catalog export destinations (OPT-IN). Empty
+      list = telemetry OFF (default). To enable, set to a one-element list,
+      e.g. [{"unity_catalog": {"logs_table":
+      "<catalog>.lakercm.reviewer_app_otel_logs", "metrics_table":
+      "<catalog>.lakercm.reviewer_app_otel_metrics", "traces_table":
+      "<catalog>.lakercm.reviewer_app_otel_spans"}}] AND set
+      reviewer_app_command to the opentelemetry-instrument variant.
+    type: complex
+    default: []
+
+  agent_telemetry_export_destinations:
+    description: >-
+      Agent app OTLP -> Unity Catalog export destinations (OPT-IN). Empty list
+      = telemetry OFF (default). WARNING: agent_app_otel_spans carries LLM I/O
+      (claim text) and MUST be granted IDENTICALLY to the restricted
+      agent_traces_otel_* tables — see docs/local-dev-setup.md.
+    type: complex
+    default: []
+
+  agent_mlflow_trace_enable_otlp_dual_export:
+    description: >-
+      MLflow OTLP dual-export flag for the agent app
+      (MLFLOW_TRACE_ENABLE_OTLP_DUAL_EXPORT). "false" = OFF (default; native
+      MLflow export only; never empty, because the Apps deployment API rejects
+      an env var with no value). Set to "true" to ADD the OTLP exporter
+      alongside native export (the additive [OtelSpanProcessor,
+      MlflowV3SpanProcessor] path). Do NOT use the legacy
+      MLFLOW_ENABLE_DUAL_EXPORT flag — it REPLACES native export and would break
+      existing prod traces/dashboards.
+    default: "false"
+
+  reviewer_app_command:
+    description: >-
+      Startup command for the reviewer app. Default = plain uvicorn (telemetry
+      OFF, EXACTLY the pre-telemetry command). To enable app telemetry, set to
+      the opentelemetry-instrument variant:
+      ["opentelemetry-instrument","uvicorn","main:app","--host","0.0.0.0","--port","8000"]
+      (and set reviewer_telemetry_export_destinations).
+    type: complex
+    default:
+      - "python"
+      - "-m"
+      - "uvicorn"
+      - "main:app"
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "8000"
+
+  # NOTE: lookup variables are intentionally NOT declared here. The CLI
+  # EAGERLY resolves every declared lookup at validate/deploy time (even ones a
+  # given bundle never references), which would force every bundle to resolve
+  # pipelines/warehouses it doesn't own and fail when they don't exist. So each
+  # lookup is declared LOCALLY in the bundle that consumes it, via a
+  # `variables:` block in that bundle's databricks.yml:
+  #   - app_warehouse_id   (lookup warehouse: ${var.app_warehouse_name})
+  #         consumed by: mlflow, apps, observability (genie as genie_warehouse_id)
+  #   - rt_warehouse_id    (lookup warehouse: ${var.rt_warehouse_name})
+  #         consumed by: apps
+  #   - documents_pipeline_id  (lookup pipeline: ${var.medical_documents_pipeline_name})
+  #         consumed by: jobs, apps
+  #   - analytics_pipeline_id  (lookup pipeline: ${var.analytics_pipeline_name})
+  #         consumed by: jobs
+  # On a fresh workspace where the looked-up resource doesn't exist yet, the
+  # deploy wrapper primes BUNDLE_VAR_<name>=PENDING to suppress the lookup, then
+  # reconciles the real id post-deploy (prime_lookup_placeholders /
+  # reconcile_lookup_ids in scripts/_deploy_lib.py).
+
+  lakercm_schema:
+    description: "Schema name for LakeRCM (under var.catalog)"
+    default: "lakercm"
+
+  app_warehouse_name:
+    description: "Standard serverless SQL warehouse: alerts, the observability dashboard, Genie, MLflow tracing, and every deploy-time SQL step (DDL, MERGE, GRANT). The only warehouse provisioning SQL may target."
+    default: "lakercm_sql_warehouse"
+
+  # The Reyden (Lakehouse//RT) warehouse behind the interactive reads. It is
+  # read-only, so it takes none of app_warehouse_name's jobs; see AGENTS.md >
+  # "Warehouses". A workspace without Lakehouse//RT sets rt_warehouse_type=PRO
+  # and rt_warehouse_size=2X-Small (BUNDLE_VAR_* or the RT_WAREHOUSE_TYPE /
+  # RT_WAREHOUSE_SIZE GitHub environment variables).
+  rt_warehouse_name:
+    description: "Reyden (Lakehouse//RT) warehouse for the interactive read paths: reviewer analytics and the agent's analytics tools. Read-only: no DDL or DML may target it."
+    default: "lakercm_rt_warehouse"
+
+  rt_warehouse_type:
+    description: "Type of the RT warehouse. REYDEN creates a Lakehouse//RT warehouse (an API-only type the CLI enum lacks, so validate warns once; it reads back as REALTIME). PRO on a workspace without Lakehouse//RT."
+    default: "REYDEN"
+
+  rt_warehouse_size:
+    description: "Size of the RT warehouse. Lakehouse//RT takes Small, Medium, Large or X-Large (it rejects 2X-Small); pair 2X-Small with rt_warehouse_type=PRO."
+    default: "Small"
+
+  # Environment suffix that namespaces DEPLOYED control-plane resource names so a
+  # `dev` deploy coexists with `prod` in the SAME workspace. Empty on prod;
+  # "_dev" on the development target (set in _shared/targets.yml). This
+  # REPLACES the old
+  # `mode: development` "[dev <user>] " NAME PREFIX — which could never apply to
+  # Databricks App names (invalid charset) and so never actually namespaced the
+  # apps; that prefix is disabled on `dev` via presets.name_prefix: "".
+  #
+  # Deliberately NOT applied where it would double- or mis-namespace:
+  #   * App names            — use "-dev" literally (App names reject "_"); set
+  #                            per-target as app_name/agent_app_name below.
+  #   * Pipeline display names — already resolve to "...-${bundle.target}"
+  #                            (= "-dev" on dev; prod overrides to drop it).
+  #   * Pipeline event-log tables — already hardcode "_dev" in the dev target
+  #                            override (pipelines/resources/*_pipeline.yml).
+  #   * The DATA plane (catalog/schema/volumes/tables/warehouse/Lakebase/trace
+  #                            tables) — intentionally SHARED; see PR notes.
+  name_suffix:
+    description: "Suffix appended to deployed control-plane resource names (jobs, MLflow experiments/model, alerts, dashboard) so a dev deploy coexists with prod in the same workspace. Empty on prod; '_dev' on dev. App names use '-dev' (charset); pipelines already carry their own dev suffix (do not double it)."
+    default: ""
+
+  schedule_pause_status:
+    description: "pause_status for the COST-GATING periodic jobs and alert schedules (embed cron, triage cron, eval curation, GEPA, alerts). UNPAUSED on prod; PAUSED on dev, so a dev deploy runs no background compute. Development mode used to pause these, and presets.trigger_pause_status does not override an explicit pause_status. NOTE: the ingest file-arrival trigger is deliberately NOT gated by this — see ingest_trigger_pause_status."
+    default: "UNPAUSED"
+
+  ingest_trigger_pause_status:
+    description: "pause_status for the documents file-arrival ingest trigger (and the analytics refresh chained off it). UNPAUSED on BOTH dev and prod — deliberately decoupled from schedule_pause_status so dev processes uploads/drops exactly like prod (the upload strategy is identical), while the cost-gating periodic crons stay paused in dev. Do not override per-target."
+    default: "UNPAUSED"
+
+  app_name:
+    description: "Reviewer app name"
+    default: "lakercm-${bundle.target}"
+
+  agent_app_name:
+    description: "Agent app name"
+    default: "lakercm-agent-${bundle.target}"
+
+  lakebase_project_id:
+    description: "Lakebase Postgres project ID"
+    default: "lakercm"
+
+  lakebase_branch_id:
+    description: "Lakebase branch ID"
+    default: "prod"
+
+  lakebase_endpoint_id:
+    description: "Lakebase compute endpoint ID"
+    default: "primary"
+
+  # --- OntoBricks knowledge graph (the dev-only `ontobricks` bundle) ---------
+  # One Databricks App runs OntoBricks' UI/REST/GraphQL AND its MCP server
+  # (mounted at /mcp, same process — bundles/ontobricks/app/combined_app.py).
+  # The agent pulls the graph over /mcp; the reviewer app renders it in a KG
+  # tab over /api/kg. Pinned source is fetched into build/ontobricks (never
+  # committed — Databricks License). See bundles/ontobricks/README.md.
+  ontobricks_app_name:
+    description: "OntoBricks Databricks App name (one app: UI + REST/GraphQL + mounted MCP at /mcp). App names reject '_', so this resolves to '-dev'."
+    default: "lakercm-ontobricks-${bundle.target}"
+
+  ontobricks_registry_schema:
+    description: "Schema (under var.catalog) holding OntoBricks' registry volume and the Delta triple tables. Declared as a DAB resource in bundles/ontobricks/resources/registry.yml so it exists before any post-step runs. Suffixed like every other control-plane name, so a dev and a prod registry cannot share one schema."
+    default: "ontobricks_registry${var.name_suffix}"
+
+  ontobricks_registry_volume:
+    description: "Volume (in var.ontobricks_registry_schema) OntoBricks writes ontology binaries to. Unsuffixed: the schema around it already carries the suffix."
+    default: "ontobricks_registry"
+
+  kg_enabled:
+    description: "Feature flag for the knowledge-graph agent tools (env LAKERCM_KG_ENABLED). Off by default; the dev target turns it on since the ontobricks bundle is dev-only. Read by the AGENT app only -- the reviewer app has no KG surface yet, so do not infer one from this flag."
+    default: "false"
+
+  medical_documents_pipeline_name:
+    description: "Name of medical documents DLT pipeline"
+    default: "lakercm-documents-pipeline-${bundle.target}"
+
+  analytics_pipeline_name:
+    description: "Name of review analytics DLT pipeline"
+    default: "lakercm-analytics-pipeline-${bundle.target}"
+
+  documents_input_volume_name:
+    description: "Input volume name for all document uploads"
+    default: "documents_input"
+
+  documents_archive_volume_name:
+    description: "Volume holding source documents already ingested into bronze. Deliberately NOT a subdirectory of documents_input: read_files recurses and Auto Loader keys its checkpoint on the path, so an in-path archive would re-parse every moved file."
+    default: "documents_archive"
+
+  documents_input_volume_path:
+    description: "Full path to input volume"
+    default: "/Volumes/${var.catalog}/${var.lakercm_schema}/${var.documents_input_volume_name}/"
+
+  documents_output_volume_name:
+    description: "Output volume name for processed documents"
+    default: "documents_output"
+
+  documents_output_volume_path:
+    description: "Full path to output volume"
+    default: "/Volumes/${var.catalog}/${var.lakercm_schema}/${var.documents_output_volume_name}/"
+
+  documents_page_images_path:
+    description: "Volume path where ai_parse_document writes per-page rendered PNGs (imageOutputPath). Reviewer serves these so bbox overlays line up with the parser's render canvas."
+    default: "${var.documents_output_volume_path}page_images/"
+
+  auto_verdict_threshold:
+    description: "Confidence threshold at/above which an extraction is auto-verified and hidden from the Reviewer app"
+    default: "0.92"
+
+  classify_confidence_ceiling:
+    description: "Observed upper bound of ai_classify v2.1's confidence_score, used by gold_extraction_labels to rescale the classification signal onto [0,1] before it enters the confidence blend. ai_classify returns a calibrated posterior over 11 mutually-exclusive labels, so unlike ai_extract's per-span score it never approaches 1.0: measured min 0.55 / median 0.68 / max 0.78 over 60 real documents, across only 12 distinct values. Blended raw it capped a flawless document at 0.956 and let an UNSCORED document outrank a confidently scored one. 0.80 is the measured ceiling plus a little headroom. Raising it lowers every classification contribution and vice versa, so re-measure before changing it."
+    default: "0.80"
+
+  vector_search_endpoint:
+    description: "Vector Search endpoint hosting the payer-policy index the agent's search_payer_policy retriever queries (provisioned best-effort by scripts/create_vector_index.py)"
+    default: "lakercm-policy-endpoint"
+
+  phi_reader_group:
+    description: "Account group whose members read unmasked PHI through gold_claim_codes_secure; non-members see pseudonymized identifiers and redacted free text. Create it in the UI to demo the unmasked persona (see scripts/create_governance_layer.py)"
+    default: "lakercm-phi-readers"
+
+  mlflow_legacy_experiment_path:
+    description: "The ORIGINAL co-mingled experiment, kept declared-but-inert (never renamed/deleted — its delete API is broken). A dedicated var so repurposing mlflow_experiment_path can't rename this resource."
+    default: "/Shared/lakercm/agent"
+
+  mlflow_experiment_path:
+    description: "PRODUCTION MLflow experiment — live agent traces + the scheduled scorer monitor. (The old co-mingled experiment is mlflow_legacy_experiment_path, left declared-but-inert in the mlflow bundle.)"
+    default: "/Shared/lakercm/agent-traces"
+
+  mlflow_eval_experiment_path:
+    description: "EVAL/OPTIMIZATION MLflow experiment — GEPA + holdout-eval + promote-gate rollouts. Kept separate from production so eval noise never floods the prod monitor."
+    default: "/Shared/lakercm/agent-eval"
+
+  # UC trace-storage binding for the two experiments (consumed by the
+  # jobs/bind_experiment_uc.py provisioning notebook). One OTel table set can
+  # hold many experiments (rows carry experiment_id); prod REUSES the existing
+  # agent_traces_otel_* tables (dashboards/alerts unchanged) while eval gets
+  # fresh, isolated agent_eval_otel_* tables.
+  trace_uc_catalog:
+    description: "UC catalog holding the OTel trace tables"
+    default: "${var.catalog}"
+  trace_uc_schema:
+    description: "UC schema holding the OTel trace tables"
+    default: "${var.lakercm_schema}"
+  # table_prefix names the OTel tables `<prefix>_otel_spans` / `_otel_logs` /
+  # `_otel_annotations` (mlflow UnityCatalog trace location).
+  prod_table_prefix:
+    description: "OTel table prefix for production (reuses the existing agent_traces_otel_* tables)"
+    default: "agent_traces"
+  eval_table_prefix:
+    description: "OTel table prefix for eval (fresh, isolated agent_eval_otel_* tables)"
+    default: "agent_eval"
+
+  agent_logged_model_name:
+    description: "UC-registered model name (catalog.schema.name) for the agent — traces auto-link to this LoggedModel via mlflow.set_active_model()"
+    default: "${var.catalog}.${var.lakercm_schema}.lakercm_agent${var.name_suffix}"
+
+  agent_eval_dataset:
+    description: "Fully-qualified UC eval dataset table for the agent"
+    default: "${var.catalog}.${var.lakercm_schema}.agent_eval_v2"
+
+  # ---------------------------------------------------------------------------
+  # DBSQL alert tuning (consumed by bundles/observability/resources/obs_alerts.yml)
+  # ---------------------------------------------------------------------------
+  # These are interpolated directly INTO each alert's query_text as numeric
+  # literals (e.g. `> ${var.alert_error_rate}` -> `> 0.02`, `INTERVAL
+  # ${var.alert_stuck_minutes} MINUTES` -> `INTERVAL 30 MINUTES`). Every alert
+  # emits a boolean breach / violating count and fires on `> 0`, so the actual
+  # threshold lives in the SQL string — no variable is ever coerced into a
+  # protobuf double_value field. Defaults below suit a production workspace;
+  # a near-idle workspace can relax them per target in _shared/targets.yml.
+  alert_error_min_count:
+    description: "Min agent-turn errors in the 15m window before error-rate can fire (ignores 1-2 client aborts)"
+    default: "3"
+  alert_error_rate:
+    description: "Agent error-rate threshold (fraction of user turns with STATUS_CODE_ERROR)"
+    default: "0.02"
+  alert_latency_min_samples:
+    description: "Min agent turns in the 15m window before p95 latency is evaluated"
+    default: "10"
+  alert_p95_latency_ms:
+    description: "p95 agent-turn latency threshold in milliseconds"
+    default: "8000"
+  alert_groundedness_min_samples:
+    description: "Min judged turns in the 1h window before groundedness fail-rate is evaluated"
+    default: "20"
+  alert_citation_min_samples:
+    description: "Min policy-retrieval turns in the 24h window before the citation fail-rate is evaluated"
+    default: "5"
+  alert_pipeline_stale_minutes:
+    description: "Minutes since the last COMPLETED pipeline update before a pipeline is considered stalled"
+    default: "20"
+  alert_stuck_minutes:
+    description: "How long (minutes) a document may sit in 'processing' before it counts as stuck"
+    default: "45"
+  alert_stuck_count:
+    description: "Backlog floor: docs stuck in 'processing' past alert_stuck_minutes that trip the alert (fire on strictly greater-than). Keep > 0 — firing on a single stuck doc flaps as docs stick and clear, which (paired with notify_on_ok) was an email-flood source."
+    default: "2"
+  alert_extraction_fail_count:
+    description: "Number of failed extractions in the last hour that trips the alert (fire on strictly greater-than). Kept above a couple so a rolling-window count crossing 1-2 doesn't flap."
+    default: "5"
+  alert_ingest_pending_count:
+    description: "Generated-but-unparsed documents (manifest minus bronze) that trip the ingest alert, paired with alert_ingest_lag_minutes (fire on strictly greater-than). Above zero so the ordinary race between the generator's manifest flush and the next micro-batch doesn't flap."
+    default: "5"
+  alert_ingest_lag_minutes:
+    description: "How long bronze may go without parsing anything (MAX(extracted_at)) while generated-but-unparsed documents are waiting, before the ingest alert fires. Must exceed the slowest single micro-batch or a busy ingest looks stalled: bronze parses 50 files per trigger, so this is minutes of headroom, not seconds. It does NOT need to cover a whole batch — extracted_at advances every micro-batch, so only a genuine stop trips it."
+    default: "30"

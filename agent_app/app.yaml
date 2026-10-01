@@ -1,0 +1,26 @@
+# =============================================================================
+# LakeRCM Agent App — minimal STATIC runtime config (committed to git)
+# =============================================================================
+# Env vars + command are owned by the BUNDLE app resource
+# (bundles/apps/resources/agent_app.yml `config:` block) and ride each
+# deployment (CLI >= 0.283.0). See reviewer_app/app.yaml for the full
+# rationale + spike evidence. Only the on-behalf-of-user authorization block
+# (no bundle-config equivalent) and a loud-failure fallback command live here.
+#
+# Pod rolls MUST go through `databricks bundle run` (or scripts/deploy_all.py,
+# which does) — a raw `databricks apps deploy` drops the bundle config.
+# =============================================================================
+
+command:
+  - uvicorn
+  - main:app
+  - --host
+  - "0.0.0.0"
+  - --port
+  - "8000"
+
+permissions:
+  - permission: user_access_token_authorization
+    scopes:
+      - all-apis
+      - offline_access

@@ -1,0 +1,46 @@
+# =============================================================================
+# LakeRCM synthetic documents (synthetic_data/)
+# =============================================================================
+# Manual trigger only: nothing schedules it. Each run writes `count` fictional
+# PDFs into the documents input volume and adds a ground-truth row per document
+# to <catalog>.<schema>.synthetic_document_manifest.
+#
+# It does NOT trigger the documents pipeline itself. The file-arrival trigger on
+# lakercm-documents-refresh owns ingestion: it fires ~90s after generation stops
+# writing (a whole run debounces into one pipeline update), then chains
+# analytics. Decoupling here is what makes a generation TIMEOUT harmless — the
+# files that landed are still picked up by file-arrival, whereas the old
+# end-of-run start_update was skipped entirely when the job was killed, and its
+# blocking wait was a large part of the job's wall-clock.
+# =============================================================================
+
+resources:
+  jobs:
+    lakercm_generate_synthetic_documents:
+      name: lakercm-generate-synthetic-documents${var.name_suffix}
+      # Generation makes one LLM narrative call per document, so a large
+      # count is long-running; the manifest is flushed in batches so a timeout
+      # here never orphans PDFs (bounded to one unflushed batch).
+      timeout_seconds: 14400
+      tasks:
+        - task_key: generate
+          notebook_task:
+            notebook_path: ../../../synthetic_data/generate_documents.py
+            source: WORKSPACE
+            base_parameters:
+              catalog: ${var.catalog}
+              schema: ${var.lakercm_schema}
+              count: "20"
+              review_share: "0.3"
+              model_endpoint: ${var.synthetic_data_model}
+              output_path: ${var.documents_input_volume_path}
+              # No pipeline_id: ingestion is owned by the file-arrival trigger on
+              # lakercm-documents-refresh (blank => the notebook skips its own
+              # trigger+wait). See the header note.
+      max_concurrent_runs: 1
+      email_notifications:
+        on_failure:
+          - ${var.notifications_email}
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}

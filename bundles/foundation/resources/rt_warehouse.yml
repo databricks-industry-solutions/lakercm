@@ -1,0 +1,56 @@
+# =============================================================================
+# Reyden (Lakehouse//RT) SQL Warehouse for the interactive reads
+# =============================================================================
+# Serves the latency-sensitive READ paths:
+#   - the reviewer app's analytics (reviewer_app/routes/analytics.py: the
+#     review_metrics metric view + fact_review / fact_document_processing /
+#     silver_reviews MVs, over the Statement Execution API);
+#   - the agent's analytics tools, which reach it through the Unity AI Gateway
+#     MCP service system.ai.dbsql with `_meta.warehouse_id` pinned to this id
+#     (agent_app/agent/tools.py > _reyden_sql).
+#
+# Everything else stays on the standard warehouse in app_warehouse.yml:
+#   - Genie: Lakehouse//RT does not support it yet.
+#   - MLflow tracing: its backend runs DDL and writes on the warehouse it is given.
+#   - The alerts and the observability dashboard (see obs_dashboard.yml for why).
+#   - Every deploy-time SQL step: Lakehouse//RT is SELECT-only, and
+#     scripts/_warehouse_sql.py refuses a REALTIME warehouse for provisioning.
+#
+# REYDEN is a create-time warehouse_type the CLI's enum does not list yet, so
+# `bundle validate` prints exactly one "invalid value for enum field" warning
+# for it. It is harmless: the deploy engine passes the value through, and the
+# warehouse reads back as REALTIME without the next plan showing drift.
+# Lakehouse//RT sizes are Small / Medium / Large / X-Large (no 2X-Small), and an
+# existing warehouse cannot be converted to it, which is why this is its own
+# resource. A workspace without Lakehouse//RT overrides rt_warehouse_type=PRO
+# and rt_warehouse_size=2X-Small (see _shared/variables.yml).
+#
+# min/max 1 matches what the create API accepts today; Lakehouse//RT scales
+# within a warehouse by DBUs rather than by cluster count.
+# =============================================================================
+
+resources:
+  sql_warehouses:
+    lakercm_rt_warehouse:
+      name: ${var.rt_warehouse_name}
+      warehouse_type: ${var.rt_warehouse_type}
+      cluster_size: ${var.rt_warehouse_size}
+      enable_serverless_compute: true
+      auto_stop_mins: 10
+      min_num_clusters: 1
+      max_num_clusters: 1
+      tags:
+        custom_tags:
+          - key: project
+            value: lakercm
+          - key: managed_by
+            value: databricks_asset_bundle
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+        - level: CAN_USE
+          service_principal_name: ${var.reviewer_sp_client_id}
+        - level: CAN_USE
+          service_principal_name: ${var.agent_sp_client_id}
+        - level: CAN_USE
+          group_name: users

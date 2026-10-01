@@ -1,0 +1,6 @@
+{
+  "repo": "https://github.com/databrickslabs/ontobricks",
+  "ref": "0.8.1",
+  "sha": "33b92be669a3366471ad8af4f837ec6a31a56aa5",
+  "note": "OntoBricks (Databricks Labs) pinned by SHA. ref is the branch the SHA lives on today; re-pin to the v0.8.1 tag once cut. Fetched into the gitignored build/ontobricks/ by scripts/fetch_ontobricks_source.py; no OntoBricks source is committed (Databricks License)."
+}

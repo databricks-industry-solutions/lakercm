@@ -1,0 +1,30 @@
+# =============================================================================
+# LakeRCM — MLflow bundle
+# =============================================================================
+# The 3 MLflow experiments (legacy-inert / prod-traces / eval), the UC
+# registered model, and the one-time bind-experiments job. The bind job is RUN
+# (not auto-triggered) after deploy and must run before observability so the
+# OTel tables exist.
+#
+# sync.paths points at the repo root so ../../../jobs/bind_experiment_uc.py
+# (relative to this bundle's resource file) is in sync scope.
+# =============================================================================
+
+bundle:
+  name: lakercm-mlflow
+
+include:
+  - ../_shared/variables.yml
+  - ../_shared/targets.yml
+  - resources/*.yml
+
+variables:
+  # Local (not shared): bind job's warehouse_id. Lookup resolves by name.
+  app_warehouse_id:
+    description: "ID of the bundle-managed app SQL warehouse (resolved by name)"
+    lookup:
+      warehouse: ${var.app_warehouse_name}
+
+sync:
+  paths:
+    - ../..

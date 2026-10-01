@@ -1,0 +1,45 @@
+.bounding-box-layer {
+  z-index: 10;
+}
+
+/* Hover effects for bounding boxes */
+.bbox-rect {
+  transition: all 0.2s ease;
+}
+
+/* Attribution highlight — bbox that's the source for the field being hovered.
+   Anchors to the canonical primary blue, replacing the legacy amber drop-shadow. */
+.bbox-rect.is-highlighted {
+  stroke: var(--primary-500, #3b82f6) !important;
+  stroke-width: 3 !important;
+  filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.55));
+}
+
+/* Selected (locked) bbox — sticky variant of is-highlighted with a softer,
+   wider halo so the selection reads as a state rather than a momentary hover.
+   Distinct from is-hovered so the user always knows which box is "pinned". */
+.bbox-rect.is-selected {
+  stroke: var(--primary-600, #2563eb) !important;
+  stroke-width: 3.5 !important;
+  filter: drop-shadow(0 0 10px rgba(37, 99, 235, 0.55))
+    drop-shadow(0 0 2px rgba(37, 99, 235, 0.85));
+}
+
+/* Dimmed when some other bbox is highlighted */
+.bbox-rect.is-dimmed {
+  transition:
+    opacity 0.15s ease,
+    stroke-width 0.15s ease;
+}
+
+/* Animation for corner indicators — opacity-only so it composes with
+   viewBox-unit radii (which scale with image size). Animating `r` here
+   would clobber the dynamically-computed value passed via the `r` attr. */
+.bounding-box-layer circle {
+  animation: pulseCorner 0.3s ease;
+}
+
+@keyframes pulseCorner {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

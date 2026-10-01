@@ -1,0 +1,23 @@
+# =============================================================================
+# LakeRCM — Pipelines bundle
+# =============================================================================
+# The two Lakeflow Declarative Pipelines: medical documents (bronze→silver→gold)
+# and review analytics. Their per-target `development:` overrides live in the
+# resource files' own `targets:` blocks and deep-merge with the shared skeleton.
+# The jobs bundle resolves these pipelines' ids by name (documents_pipeline_id /
+# analytics_pipeline_id lookups), so this bundle must deploy before jobs.
+#
+# sync.paths -> repo root so ../../../pipelines/*.{sql,py} are in sync scope.
+# =============================================================================
+
+bundle:
+  name: lakercm-pipelines
+
+include:
+  - ../_shared/variables.yml
+  - ../_shared/targets.yml
+  - resources/*.yml
+
+sync:
+  paths:
+    - ../..

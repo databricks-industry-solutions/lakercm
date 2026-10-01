@@ -1,0 +1,90 @@
+.donut-chart {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.donut-svg-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.donut-segment {
+  transition: stroke-dasharray 0.5s ease, stroke-dashoffset 0.5s ease;
+}
+
+.donut-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.donut-pct {
+  font-family: system-ui, sans-serif;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.donut-label {
+  font-family: system-ui, sans-serif;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 4px;
+}
+
+.donut-legend {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.donut-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.donut-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.donut-dot-correct {
+  background: oklch(0.48 0.20 155);
+}
+
+.donut-dot-partial {
+  background: oklch(0.60 0.20 60);
+}
+
+.donut-dot-incorrect {
+  background: oklch(0.48 0.22 25);
+}
+
+.donut-legend-text {
+  font-family: system-ui, sans-serif;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.donut-legend-value {
+  font-family: system-ui, sans-serif;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}

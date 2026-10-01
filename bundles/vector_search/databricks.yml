@@ -1,0 +1,29 @@
+# =============================================================================
+# LakeRCM — Vector Search bundle
+# =============================================================================
+# The payer-policy Vector Search endpoint + DELTA_SYNC index that backs the
+# agent's `search_payer_policy` retriever tool — the tool whose RETRIEVER span
+# finally lets the already-registered `RetrievalGroundedness` judge score live
+# traffic (it returns None without one).
+#
+# Like the lakebase and reference_data bundles, this deploys ZERO terraform
+# resources: Vector Search endpoints and indexes are not DAB resource types. Its
+# real job is the RUNTIME provisioning step the orchestrator runs as a
+# post-deploy hook (scripts/deploy_all.py -> bundle_registry:
+# vector_search.post += vector_index), which shells out to
+# scripts/create_vector_index.py.
+#
+# Ordering: AFTER reference_data (the index syncs from ref_payer_policy, which
+# that bundle's seed creates) and BEFORE apps (the agent tool queries the
+# index). Provisioning is best-effort — see the script's docstring.
+#
+# No external artifact files → no sync.paths override.
+# =============================================================================
+
+bundle:
+  name: lakercm-vector-search
+
+include:
+  - ../_shared/variables.yml
+  - ../_shared/targets.yml
+  - resources/*.yml

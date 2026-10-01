@@ -1,0 +1,47 @@
+# =============================================================================
+# LakeRCM — Unity AI Gateway bundle
+# =============================================================================
+# Owns the per-tier Unity AI Gateway model services for complexity-tiered model
+# routing (docs/complexity-tiered-model-routing.md).
+#
+# WHY ITS OWN BUNDLE, AND WHY `engine: direct`
+#   `model_services` is a DIRECT-DEPLOYMENT-ENGINE-ONLY resource type. On the
+#   terraform engine the CLI refuses it outright, before terraform even inits:
+#       Error: Model service resources are only supported with direct
+#       deployment mode
+#   The apps bundle — the natural home, since the agent app is the only consumer
+#   — pinned `engine: terraform` when this bundle was split out (the direct
+#   engine 400'd on the reviewer app's `forward_user_access_token` update-mask,
+#   the OBO bug), so the services got their own direct-engine bundle instead,
+#   exactly as bundles/genie does for `genie_spaces`. CLI 1.15.0 fixed that bug
+#   and the apps bundle no longer pins an engine, so moving the services there
+#   is now possible.
+#
+#   Consequence: DABs has no cross-bundle resource references, so the agent app
+#   CANNOT do `${resources.model_services.*.model_service_id}` from the apps
+#   bundle. The endpoint names are composed from the same deterministic vars the
+#   blend already uses (var.agent_llm_endpoint is
+#   `${var.catalog}.${var.lakercm_schema}.lakercm-agent-llm`), so no
+#   `terraform output` copy is needed either way.
+#
+#   If the apps bundle ever moves to the direct engine (needs the OBO bug fixed,
+#   plus `databricks bundle deployment migrate`), these two resources could fold
+#   back into bundles/apps and regain a real dependency edge.
+#
+# IN THE DEPLOY PATH FOR DEV ONLY: scripts/bundle_registry.py registers this
+# bundle with targets=("dev",), so it deploys dev's own model services
+# (resources/agent_llm.yml, the non-routed blend; resources/model_services.yml,
+# the routing tiers) and never runs for prod, whose blend is terraform-managed
+# (infra/ai_gateway) and whose tiers wait on the routing eval.
+#
+# No external artifact files -> no sync.paths override.
+# =============================================================================
+
+bundle:
+  name: lakercm-ai-gateway
+  engine: direct
+
+include:
+  - ../_shared/variables.yml
+  - ../_shared/targets.yml
+  - resources/*.yml

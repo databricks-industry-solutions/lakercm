@@ -1,0 +1,21 @@
+# =============================================================================
+# LakeRCM — Foundation bundle
+# =============================================================================
+# The UC/compute base every other bundle looks up: the schema, document
+# volumes, the standard SQL warehouse (app_warehouse.yml) and the Reyden
+# read-only one (rt_warehouse.yml). Deploys FIRST in the DAG — the schema
+# must exist before mlflow's registered model (now a var-literal ref), and
+# the warehouses before any bundle that resolves app_warehouse_id or
+# rt_warehouse_id.
+#
+# Owns the cross-cutting catalog-grant step (it owns the catalog/schema).
+# No external artifact files, so no sync.paths override is needed.
+# =============================================================================
+
+bundle:
+  name: lakercm-foundation
+
+include:
+  - ../_shared/variables.yml
+  - ../_shared/targets.yml
+  - resources/*.yml

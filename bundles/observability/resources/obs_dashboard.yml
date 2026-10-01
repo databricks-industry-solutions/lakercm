@@ -1,0 +1,43 @@
+# =============================================================================
+# AI/BI dashboard — agent trace observability
+# =============================================================================
+# dataset_catalog/dataset_schema set the DEFAULT catalog+schema for every
+# dataset query, so the .lvdash.json keeps table refs UNQUALIFIED
+# (agent_traces_otel_spans / _otel_annotations) and stays portable across
+# dev/prod — the catalog/schema come from bundle vars at deploy
+# time (no JSON templating needed; requires CLI >= v0.281).
+#
+# warehouse_id uses the app_warehouse_id lookup (resolves the bundle-managed
+# lakercm_sql_warehouse by name) rather than a cross-bundle ${resources.*}
+# ref, since the warehouse lives in the foundation bundle.
+#
+# It stays on that standard warehouse, not the Reyden (Lakehouse//RT) one:
+# 8 of the 11 datasets fail there today, for two reasons (tested 2026-09):
+#   - the MLflow view they read, agent_traces_trace_unified, is WITH SCHEMA
+#     BINDING and declares execution_duration_ms DOUBLE over a DECIMAL
+#     expression; RT's strict ANSI mode refuses that implicit up-cast;
+#   - RT parses `parse_json(...):total_tokens` as a named parameter marker.
+# Both run here. To move the dashboard, add an rt_warehouse_id lookup to this
+# bundle once RT reads those views, or rewrite the datasets onto the
+# agent_traces_otel_* base tables.
+#
+# embed_credentials: true so the `users` group can view without each member
+# holding SELECT on the restricted agent_traces_otel_* tables (queries run as
+# the deploying owner, who has access).
+# =============================================================================
+
+resources:
+  dashboards:
+    lakercm_agent_observability:
+      display_name: "LakeRCM Agent — Observability${var.name_suffix}"
+      file_path: ../agent_observability.lvdash.json
+      warehouse_id: ${var.app_warehouse_id}
+      parent_path: /Workspace/Users/${var.user_email}/lakercm
+      embed_credentials: true
+      dataset_catalog: ${var.catalog}
+      dataset_schema: ${var.lakercm_schema}
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+        - level: CAN_READ
+          group_name: users

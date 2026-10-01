@@ -1,0 +1,39 @@
+# =============================================================================
+# Lakebase Autoscaling Resources — NOT managed as terraform resources.
+# =============================================================================
+# The Lakebase `postgres_projects` / `postgres_branches` are intentionally NOT
+# declared here. `databricks bundle deployment bind` imports these newer
+# Lakebase Autoscaling types with an INCOMPLETE state (no `spec` block), so the
+# next `bundle deploy` reads project_id/pg_version as newly-set ForceNew fields
+# and plans a REPLACE — which would destroy the live Postgres DB (checkpoint_*
+# tables + all data). Verified 2026-06-08 (plan: 2 to destroy).
+#
+# These are stable, pre-existing infrastructure (like the workspace catalog,
+# which is also not bundle-managed). They're managed via the `databricks
+# postgres` CLI. The project/branch keep `no_expiry` regardless, so they persist.
+#
+# The synced table CAN now be bundle-managed: the schema gap that deferred it is
+# gone as of CLI v1.15.0, which ships `postgres_synced_tables` (provider
+# 1.128.0, `databricks_postgres_synced_table`). resources/synced_table.yml.deferred
+# holds the correct, schema-valid resource and its adoption runbook, but is kept
+# `.deferred` until someone runs that runbook deliberately — adoption needs an
+# out-of-band delete first, and `apps` NEEDS `lakebase` (scripts/bundle_registry.py),
+# so a failed lakebase deploy breaks the whole chain. Adopt by delete + fresh
+# CREATE, NOT by `bundle deployment bind`, precisely to avoid the
+# incomplete-state REPLACE hazard above.
+#
+# Two things that did not exist when the warning above was written and that
+# make it far less dangerous to work near:
+#   - `databricks bundle plan` is a true dry-run — always run it and read the
+#     add/change/delete counts before `bundle deploy` on this bundle.
+#   - `lifecycle.prevent_destroy` is supported on these resources.
+#
+# This bundle's real job is the RUNTIME Lakebase steps the deploy orchestrator
+# runs as its post-deploy hooks (scripts/deploy_all.py -> bundle_registry):
+#   - sync_pg_host            (read the live endpoint host -> var overrides)
+#   - provision_lakebase_roles (register reviewer/agent SP Postgres roles)
+#   - migrate_checkpointer_owner (hand checkpoint_* tables to the group role)
+# Those are scripts (add_lakebase_roles.py / migrate_checkpointer_to_group_role.py),
+# not terraform — so this bundle deploys zero resources but still owns the steps.
+
+resources: {}

@@ -1,0 +1,345 @@
+/* In-document assistant — right-side drawer BESIDE the reviewer pane.
+
+   It stays position: fixed so it does not scroll away from a long document, but
+   it no longer covers the review surface: .detail-page reserves a gutter of
+   exactly --assistant-width while this is open (see DocumentDetailPage.css).
+   The width below must therefore stay the variable and not a literal, or the
+   drawer and the gutter drift and the reviewer gets either a gap or an overlap. */
+
+.reviewer-assistant {
+  position: fixed;
+  top: var(--header-height, 56px);
+  right: 0;
+  bottom: 0;
+  /* Fallback matches the variable's own default, for any mount outside
+     .detail-page where the variable is not inherited. */
+  width: var(--assistant-width, min(420px, 92vw));
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface, #fff);
+  border-left: 1px solid var(--color-border, var(--border, #e5e7eb));
+  box-shadow: var(--shadow-overlay, -8px 0 24px rgba(0, 0, 0, 0.12));
+  z-index: 50;
+}
+
+.ra-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  border-bottom: 1px solid var(--color-border, var(--border, #e5e7eb));
+}
+
+.ra-header-title {
+  font-family: var(--font-display, inherit);
+  font-weight: var(--font-semibold, 600);
+  font-size: 0.95rem;
+  color: var(--color-text, #111827);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.ra-spark {
+  color: var(--accent, var(--primary-600, #2563eb));
+}
+
+.ra-close {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm, 6px);
+}
+.ra-close:hover {
+  background: var(--neutral-100, #f3f4f6);
+  color: var(--color-text, #111827);
+}
+
+/* Toolbar ---------------------------------------------------------------- */
+/* Replaced the Assistant/Notepad tab strip. The notepad moved to ReviewNotes at
+   the bottom of the document page, which left a two-tab control with one tab —
+   chrome for nothing. The row now carries the reasoning-tier selector. */
+.ra-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: var(--space-2, 8px) var(--space-3, 12px);
+  border-bottom: 1px solid var(--color-border, var(--border, #e5e7eb));
+}
+
+/* Resize handle ---------------------------------------------------------- */
+/* On the drawer's own left edge, but the WIDTH is owned by DocumentDetailPage:
+   --assistant-width drives both this drawer and the page's right gutter, so one
+   number keeps them in step. 6px is a comfortable grab target without stealing
+   from the content; the ::after widens the hit area without widening the line. */
+.ra-resizer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 1;
+}
+
+.ra-resizer::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: transparent;
+  transition: background-color var(--transition-fast, 150ms);
+}
+
+.ra-resizer:hover::after,
+.ra-resizer:focus-visible::after {
+  background: var(--accent, var(--primary-600, #2563eb));
+}
+
+.ra-resizer:focus-visible {
+  outline: none;
+}
+
+/* Below this width the drawer overlays the page instead of reflowing it, so
+   there is no gutter to trade against and resizing is meaningless. The drag
+   handler carries the same guard for a window shrunk mid-session. */
+@media (max-width: 720px) {
+  .ra-resizer {
+    display: none;
+  }
+}
+
+/* Messages ---------------------------------------------------------------- */
+.ra-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4, 16px);
+}
+.ra-messages-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+}
+
+.ra-empty {
+  text-align: center;
+  color: var(--color-text-muted, #6b7280);
+  padding: var(--space-6, 24px) var(--space-3, 12px);
+}
+.ra-empty-title {
+  font-weight: var(--font-semibold, 600);
+  color: var(--color-text, #111827);
+  margin: 0 0 var(--space-2, 8px);
+}
+.ra-empty-sub {
+  font-size: 0.85rem;
+  margin: 0 0 var(--space-4, 16px);
+}
+.ra-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+}
+.ra-suggestion {
+  text-align: left;
+  border: 1px solid var(--color-border, var(--border, #e5e7eb));
+  background: var(--color-bg, #f9fafb);
+  border-radius: var(--radius-md, 8px);
+  padding: var(--space-3, 12px);
+  font-size: 0.85rem;
+  color: var(--color-text, #111827);
+  cursor: pointer;
+}
+.ra-suggestion:hover {
+  border-color: var(--accent, var(--primary-500, #3b82f6));
+}
+
+/* Staged action cards ----------------------------------------------------- */
+.ra-action-card {
+  border: 1px solid var(--color-border, var(--border, #e5e7eb));
+  border-left: 3px solid var(--accent, var(--primary-500, #3b82f6));
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface, #fff);
+  padding: var(--space-3, 12px);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(0, 0, 0, 0.05));
+}
+.ra-action-card.is-applied {
+  border-left-color: var(--pill-ok-fg, #16a34a);
+}
+.ra-action-card.is-rejected {
+  opacity: 0.6;
+  border-left-color: var(--neutral-400, #9ca3af);
+}
+.ra-action-note {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  font-size: 0.82rem;
+  color: var(--color-text-muted, #6b7280);
+  border-left-color: var(--neutral-300, #d1d5db);
+}
+.ra-note-icon {
+  color: var(--accent, var(--primary-600, #2563eb));
+}
+
+.ra-card-title {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: var(--font-semibold, 600);
+  color: var(--color-text-muted, #6b7280);
+  margin-bottom: var(--space-2, 8px);
+}
+.ra-card-key {
+  font-weight: var(--font-medium, 500);
+  color: var(--color-text-muted, #6b7280);
+  font-size: 0.8rem;
+}
+.ra-card-value {
+  font-family: var(--font-body, inherit);
+  color: var(--color-text, #111827);
+  background: var(--neutral-50, #f9fafb);
+  border-radius: var(--radius-sm, 6px);
+  padding: var(--space-2, 8px);
+  margin: var(--space-2, 8px) 0;
+  word-break: break-word;
+}
+.ra-card-rationale {
+  font-size: 0.82rem;
+  color: var(--color-text-muted, #6b7280);
+  margin: var(--space-2, 8px) 0 0;
+}
+
+.ra-verdict-chip {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: var(--radius-full, 999px);
+  font-size: 0.78rem;
+  font-weight: var(--font-semibold, 600);
+}
+.ra-verdict-correct {
+  background: var(--pill-ok-bg, #dcfce7);
+  color: var(--pill-ok-fg, #16a34a);
+}
+.ra-verdict-partially_correct {
+  background: var(--pill-warn-bg, #fef9c3);
+  color: var(--pill-warn-fg, #ca8a04);
+}
+.ra-verdict-incorrect {
+  background: var(--pill-danger-bg, #fee2e2);
+  color: var(--pill-danger-fg, #dc2626);
+}
+
+.ra-card-actions {
+  display: flex;
+  gap: var(--space-2, 8px);
+  margin-top: var(--space-3, 12px);
+}
+.ra-btn {
+  border-radius: var(--radius-sm, 6px);
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: var(--font-medium, 500);
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.ra-btn-approve {
+  background: var(--accent, var(--primary-600, #2563eb));
+  color: var(--accent-on, #fff);
+}
+.ra-btn-approve:hover {
+  background: var(--accent-strong, var(--primary-700, #1d4ed8));
+}
+.ra-btn-reject {
+  background: transparent;
+  border-color: var(--color-border, var(--border, #e5e7eb));
+  color: var(--color-text-muted, #6b7280);
+}
+.ra-btn-reject:hover {
+  background: var(--neutral-100, #f3f4f6);
+}
+.ra-card-status {
+  margin-top: var(--space-2, 8px);
+  font-size: 0.8rem;
+}
+.ra-card-status--ok {
+  color: var(--pill-ok-fg, #16a34a);
+}
+.ra-card-status--muted {
+  color: var(--color-text-muted, #6b7280);
+}
+
+/* Input ------------------------------------------------------------------- */
+.ra-input-area {
+  border-top: 1px solid var(--color-border, var(--border, #e5e7eb));
+  padding: var(--space-3, 12px);
+}
+.ra-input-wrap {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2, 8px);
+  border: 1px solid var(--color-border, var(--border, #e5e7eb));
+  border-radius: var(--radius-lg, 12px);
+  padding: var(--space-2, 8px);
+  background: var(--color-surface, #fff);
+}
+.ra-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  resize: none;
+  max-height: 140px;
+  font-family: var(--font-body, inherit);
+  font-size: 0.9rem;
+  color: var(--color-text, #111827);
+  background: transparent;
+}
+.ra-send {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: var(--radius-full, 999px);
+  background: var(--neutral-200, #e5e7eb);
+  color: var(--neutral-500, #6b7280);
+  cursor: not-allowed;
+  font-size: 1rem;
+}
+.ra-send.active {
+  background: var(--accent, var(--primary-600, #2563eb));
+  color: var(--accent-on, #fff);
+  cursor: pointer;
+}
+.ra-send-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  border-radius: var(--radius-full, 999px);
+  animation: ra-spin 0.7s linear infinite;
+}
+@keyframes ra-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.ra-disclaimer {
+  font-size: 0.72rem;
+  color: var(--color-text-muted, #6b7280);
+  text-align: center;
+  margin: var(--space-2, 8px) 0 0;
+}
+
+@media (max-width: 640px) {
+  .reviewer-assistant {
+    width: 100vw;
+    top: 0;
+  }
+}

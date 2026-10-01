@@ -1,0 +1,50 @@
+# Supply-chain pinning stance — read before "fixing" these to hashes.
+#
+# Every dependency here is exact-pinned (==). The pins, plus CI resolving them
+# from one trusted index, are the supply-chain control.
+#
+# We deliberately do NOT add pip --hash / --require-hashes here:
+#   1. Marginal gain. With one trusted index and exact pins,
+#      hashes would only guard against the trusted registry serving swapped
+#      bytes for an already-pinned version. npm already carries full SRI
+#      integrity (package-lock) and the Actions are SHA-pinned; pip is the one
+#      ecosystem where hashing costs more than it buys here.
+#   2. It breaks the eval path. A single --hash flips the WHOLE file into
+#      hash-checking mode, which forces == on every transitive package — and
+#      the serverless jobs runtime rejects that against its
+#      immutable-package-constraints.txt (see agent_app/requirements-eval.txt).
+#      It would also couple the Databricks Apps build to a generated lockfile.
+#
+# So: version-pinned from a trusted sole registry; artifact hashing is out of
+# scope on purpose, not an oversight.
+
+fastapi==0.141.1
+uvicorn==0.52.4
+pydantic-settings==2.15.0
+databricks-sdk==0.138.0
+psycopg[binary]==3.3.5
+psycopg-pool==3.3.1
+langchain==1.4.0
+langchain-community==0.4.2
+langgraph==1.2.11
+# create_react_agent post_model_hook needs the v2 prebuilt graph
+# (langgraph-prebuilt 0.6+), which this exact pin satisfies — it keeps the
+# AG-UI path's post_model_hook (surfaces trace_id into state) guaranteed.
+# Do not downgrade below 0.6.0.
+langgraph-prebuilt==1.1.0
+langgraph-checkpoint-postgres==3.1.2
+langchain-core==1.6.2
+langchain-openai==1.6.0
+mlflow[databricks]==3.16.0
+# OTel OTLP gRPC exporter for the opt-in Apps telemetry path. Exact-pinned
+# already on dev; kept exact here to satisfy the supply-chain checklist.
+opentelemetry-exporter-otlp-proto-grpc==1.43.0
+databricks-agents==1.12.0
+httpx==0.28.1
+sse-starlette==3.4.10
+# AG-UI ↔ LangGraph adapter. The frontend uses `@ag-ui/client.HttpAgent`
+# via CopilotKit React v2's `selfManagedAgents`, so we only need the raw
+# adapter — not the `copilotkit` Python runtime package (it ships broken
+# against this version of ag-ui-langgraph; see agent_app/main.py for the
+# rationale). Pinned exact: this ecosystem ships 2-3 releases/day.
+ag-ui-langgraph==0.0.35

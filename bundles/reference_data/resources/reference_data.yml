@@ -1,0 +1,12 @@
+# =============================================================================
+# Reference-data resources — NOT managed as terraform resources.
+# =============================================================================
+# The code-set reference tables (ref_icd10_cm, ref_cpt_hcpcs) are plain UC
+# Delta tables, which are not a Databricks Asset Bundle resource type. They
+# are created + populated by the deploy orchestrator's post-deploy hook
+# (scripts/deploy_all.py -> bundle_registry: reference_data.post +=
+# seed_reference_data -> scripts/seed_reference_data.py), an idempotent
+# CREATE OR REPLACE issued through the app warehouse. Same pattern as the
+# semantic layer (scripts/create_semantic_layer.py) and the Lakebase runtime
+# steps — this bundle deploys zero resources but still owns the step.
+resources: {}

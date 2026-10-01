@@ -1,0 +1,568 @@
+{
+  "datasets": [
+    {
+      "name": "ds_kpis",
+      "displayName": "Headline KPIs",
+      "parameters": [
+        { "displayName": "lookback_days", "keyword": "lookback_days", "dataType": "INTEGER", "defaultSelection": { "values": { "dataType": "INTEGER", "values": [ { "value": "90" } ] } } }
+      ],
+      "queryLines": [
+        "SELECT\n",
+        "  COUNT(*) AS turns,\n",
+        "  COALESCE(ROUND(approx_percentile(tu.execution_duration_ms, 0.50) / 1000.0, 2), 0) AS p50_s,\n",
+        "  COALESCE(ROUND(approx_percentile(tu.execution_duration_ms, 0.95) / 1000.0, 2), 0) AS p95_s,\n",
+        "  COALESCE(ROUND(COUNT_IF(tu.state = 'ERROR') * 1.0 / NULLIF(COUNT(*), 0), 4), 0) AS error_rate,\n",
+        "  COALESCE(approx_percentile(try_cast(parse_json(tm.trace_metadata:['mlflow.trace.tokenUsage']::STRING):total_tokens AS BIGINT), 0.50), 0) AS median_tokens,\n",
+        "  COALESCE(SUM(try_cast(parse_json(tm.trace_metadata:['mlflow.trace.tokenUsage']::STRING):input_tokens AS BIGINT)), 0) AS total_input_tokens,\n",
+        "  COALESCE(SUM(try_cast(parse_json(tm.trace_metadata:['mlflow.trace.tokenUsage']::STRING):output_tokens AS BIGINT)), 0) AS total_output_tokens\n",
+        "FROM agent_traces_trace_unified tu\n",
+        "LEFT JOIN agent_traces_trace_metadata tm ON tu.trace_id = tm.trace_id\n",
+        "WHERE tu.request_time >= current_timestamp() - make_dt_interval(:lookback_days)"
+      ]
+    },
+    {
+      "name": "ds_judge_overall",
+      "displayName": "Overall judge pass rate",
+      "parameters": [
+        { "displayName": "lookback_days", "keyword": "lookback_days", "dataType": "INTEGER", "defaultSelection": { "values": { "dataType": "INTEGER", "values": [ { "value": "90" } ] } } }
+      ],
+      "queryLines": [
+        "SELECT\n",
+        "  COALESCE(ROUND(AVG(CASE WHEN lower(a.feedback.value) IN ('true','yes','pass') THEN 1.0 ELSE 0.0 END), 4), 0) AS overall_pass_rate,\n",
+        "  COUNT(*) AS assessments\n",
+        "FROM agent_traces_trace_unified tu\n",
+        "LATERAL VIEW explode(tu.assessments) t AS a\n",
+        "WHERE tu.request_time >= current_timestamp() - make_dt_interval(:lookback_days)\n",
+        "  AND a.feedback.value IS NOT NULL"
+      ]
+    },
+    {
+      "name": "ds_state_breakdown",
+      "displayName": "Outcome breakdown",
+      "parameters": [
+        { "displayName": "lookback_days", "keyword": "lookback_days", "dataType": "INTEGER", "defaultSelection": { "values": { "dataType": "INTEGER", "values": [ { "value": "90" } ] } } }
+      ],
+      "queryLines": [
+        "SELECT\n",
+        "  CASE WHEN state = 'ERROR' THEN 'Error' ELSE 'OK' END AS outcome,\n",
+        "  COUNT(*) AS turns\n",
+        "FROM agent_traces_trace_unified\n",
+        "WHERE request_time >= current_timestamp() - make_dt_interval(:lookback_days)\n",
+        "GROUP BY 1"
+      ]
+    },
+    {
+      "name": "ds_traffic_by_day",
+      "displayName": "Traffic by day",
+      "parameters": [
+        { "displayName": "lookback_days", "keyword": "lookback_days", "dataType": "INTEGER", "defaultSelection": { "values": { "dataType": "INTEGER", "values": [ { "value": "90" } ] } } }
+      ],
+      "queryLines": [
+        "SELECT\n",
+        "  date_trunc('DAY', request_time) AS day,\n",
+        "  COUNT(*) AS requests,\n",
+        "  COUNT_IF(state = 'ERROR') AS errors\n",
+        "FROM agent_traces_trace_unified\n",
+        "WHERE request_time >= current_timestamp() - make_dt_interval(:lookback_days)\n",
+        "GROUP BY 1\n",
+        "ORDER BY 1"
+      ]
+    },
+    {
+      "name": "ds_judge_by_scorer",
+      "displayName": "Judge pass rate by scorer",
+      "parameters": [
+        { "displayName": "lookback_days", "keyword": "lookback_days", "dataType": "INTEGER", "defaultSelection": { "values": { "dataType": "INTEGER", "values": [ { "value": "90" } ] } } }
+      ],
+      "queryLines": [
+        "SELECT\n",
+        "  a.assessment_name AS scorer,\n",
+        "  COUNT(*) AS evaluated,\n",
+        "  SUM(CASE WHEN lower(a.feedback.value) IN ('true','yes','pass') THEN 1 ELSE 0 END) AS passes,\n",
+        "  ROUND(100.0 * SUM(CASE WHEN lower(a.feedback.value) IN ('true','yes','pass') THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 1) AS pass_pct\n",
+        "FROM agent_traces_trace_unified tu\n",
+        "LATERAL VIEW explode(tu.assessments) t AS a\n",
+        "WHERE tu.request_time >= current_timestamp() - make_dt_interval(:lookback_days)\n",
+        "  AND a.feedback.value IS NOT NULL\n",
+        "GROUP BY 1\n",
+        "ORDER BY evaluated DESC"
+      ]
+    },
+    {
+      "name": "ds_top_tools",
+      "displayName": "Top tools",
+      "parameters": [
+        { "displayName": "lookback_days", "keyword": "lookback_days", "dataType": "INTEGER", "defaultSelection": { "values": { "dataType": "INTEGER", "values": [ { "value": "90" } ] } } }
+      ],
+      "queryLines": [
+        "SELECT\n",
+        "  name AS tool_name,\n",
+        "  COUNT(*) AS invocations,\n",
+        "  ROUND(approx_percentile((end_time_unix_nano - start_time_unix_nano) / 1e6, 0.50)) AS p50_ms,\n",
+        "  ROUND(approx_percentile((end_time_unix_nano - start_time_unix_nano) / 1e6, 0.95)) AS p95_ms\n",
+        "FROM agent_traces_otel_spans\n",
+        "WHERE time >= current_timestamp() - make_dt_interval(:lookback_days)\n",
+        "  AND UPPER(attributes:['mlflow.spanType']::STRING) = 'TOOL'\n",
+        "GROUP BY 1\n",
+        "ORDER BY invocations DESC\n",
+        "LIMIT 20"
+      ]
+    },
+    {
+      "name": "ds_memory_reads",
+      "displayName": "Memory-read distribution",
+      "parameters": [
+        { "displayName": "lookback_days", "keyword": "lookback_days", "dataType": "INTEGER", "defaultSelection": { "values": { "dataType": "INTEGER", "values": [ { "value": "90" } ] } } }
+      ],
+      "queryLines": [
+        "WITH per_trace AS (\n",
+        "  SELECT trace_id, SUM(CASE WHEN name = 'get_user_memory' THEN 1 ELSE 0 END) AS memory_reads\n",
+        "  FROM agent_traces_otel_spans\n",
+        "  WHERE time >= current_timestamp() - make_dt_interval(:lookback_days)\n",
+        "    AND UPPER(attributes:['mlflow.spanType']::STRING) = 'TOOL'\n",
+        "  GROUP BY trace_id\n",
+        ")\n",
+        "SELECT CAST(memory_reads AS STRING) AS memory_reads, COUNT(*) AS turns\n",
+        "FROM per_trace\n",
+        "GROUP BY memory_reads\n",
+        "ORDER BY memory_reads"
+      ]
+    },
+    {
+      "name": "ds_tokens_by_day",
+      "displayName": "Tokens by day",
+      "parameters": [
+        { "displayName": "lookback_days", "keyword": "lookback_days", "dataType": "INTEGER", "defaultSelection": { "values": { "dataType": "INTEGER", "values": [ { "value": "90" } ] } } }
+      ],
+      "queryLines": [
+        "SELECT\n",
+        "  date_trunc('DAY', tu.request_time) AS day,\n",
+        "  COALESCE(SUM(try_cast(parse_json(tm.trace_metadata:['mlflow.trace.tokenUsage']::STRING):output_tokens AS BIGINT)), 0) AS output_tokens\n",
+        "FROM agent_traces_trace_unified tu\n",
+        "JOIN agent_traces_trace_metadata tm ON tu.trace_id = tm.trace_id\n",
+        "WHERE tu.request_time >= current_timestamp() - make_dt_interval(:lookback_days)\n",
+        "GROUP BY 1\n",
+        "ORDER BY 1"
+      ]
+    },
+    {
+      "name": "ds_traffic_by_user",
+      "displayName": "Traffic by user",
+      "parameters": [
+        { "displayName": "lookback_days", "keyword": "lookback_days", "dataType": "INTEGER", "defaultSelection": { "values": { "dataType": "INTEGER", "values": [ { "value": "90" } ] } } }
+      ],
+      "queryLines": [
+        "SELECT\n",
+        "  COALESCE(tm.trace_metadata:['mlflow.trace.user']::STRING, '(unknown)') AS user_email,\n",
+        "  COUNT(*) AS turns,\n",
+        "  ROUND(AVG(tu.execution_duration_ms) / 1000.0, 1) AS avg_latency_s,\n",
+        "  COUNT_IF(tu.state = 'ERROR') AS error_turns\n",
+        "FROM agent_traces_trace_unified tu\n",
+        "LEFT JOIN agent_traces_trace_metadata tm ON tu.trace_id = tm.trace_id\n",
+        "WHERE tu.request_time >= current_timestamp() - make_dt_interval(:lookback_days)\n",
+        "GROUP BY 1\n",
+        "ORDER BY turns DESC\n",
+        "LIMIT 50"
+      ]
+    },
+    {
+      "name": "ds_conversations",
+      "displayName": "Conversations",
+      "parameters": [
+        { "displayName": "lookback_days", "keyword": "lookback_days", "dataType": "INTEGER", "defaultSelection": { "values": { "dataType": "INTEGER", "values": [ { "value": "90" } ] } } }
+      ],
+      "queryLines": [
+        "SELECT\n",
+        "  tm.trace_metadata:['mlflow.trace.session']::STRING AS conversation_id,\n",
+        "  COUNT(*) AS turns,\n",
+        "  ROUND(SUM(tu.execution_duration_ms) / 1000.0, 1) AS total_latency_s,\n",
+        "  MIN(tu.request_time) AS started_at,\n",
+        "  MAX(tu.request_time) AS last_turn_at\n",
+        "FROM agent_traces_trace_unified tu\n",
+        "JOIN agent_traces_trace_metadata tm ON tu.trace_id = tm.trace_id\n",
+        "WHERE tu.request_time >= current_timestamp() - make_dt_interval(:lookback_days)\n",
+        "  AND tm.trace_metadata:['mlflow.trace.session'] IS NOT NULL\n",
+        "GROUP BY 1\n",
+        "ORDER BY last_turn_at DESC\n",
+        "LIMIT 50"
+      ]
+    },
+    {
+      "name": "ds_window_choices",
+      "displayName": "Lookback window choices",
+      "queryLines": [
+        "SELECT * FROM (VALUES (7), (14), (30), (90), (365)) AS t(lookback_days)"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "overview",
+      "displayName": "Agent Observability",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1",
+      "layout": [
+        {
+          "widget": {
+            "name": "w_title",
+            "multilineTextboxSpec": {
+              "lines": [ "# LakeRCM Agent — Observability" ]
+            }
+          },
+          "position": { "x": 0, "y": 0, "width": 9, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "w_subtitle",
+            "multilineTextboxSpec": {
+              "lines": [ "Live health, quality, and cost for the LakeRCM claims-review agent, read straight from its MLflow OTEL trace tables (`agent_traces_*`). Each row is one agent turn served by `/responses` or the AG-UI endpoint. Use the **Lookback window** control to change the time range (default: last 90 days)." ]
+            }
+          },
+          "position": { "x": 0, "y": 1, "width": 9, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "w_lookback",
+            "queries": [
+              { "name": "q_choices", "query": { "datasetName": "ds_window_choices", "fields": [ { "name": "lookback_days", "expression": "`lookback_days`" } ], "disaggregated": false } },
+              { "name": "q_kpis", "query": { "datasetName": "ds_kpis", "parameters": [ { "name": "lookback_days", "keyword": "lookback_days" } ], "disaggregated": false } },
+              { "name": "q_judge_overall", "query": { "datasetName": "ds_judge_overall", "parameters": [ { "name": "lookback_days", "keyword": "lookback_days" } ], "disaggregated": false } },
+              { "name": "q_state", "query": { "datasetName": "ds_state_breakdown", "parameters": [ { "name": "lookback_days", "keyword": "lookback_days" } ], "disaggregated": false } },
+              { "name": "q_traffic", "query": { "datasetName": "ds_traffic_by_day", "parameters": [ { "name": "lookback_days", "keyword": "lookback_days" } ], "disaggregated": false } },
+              { "name": "q_judge_scorer", "query": { "datasetName": "ds_judge_by_scorer", "parameters": [ { "name": "lookback_days", "keyword": "lookback_days" } ], "disaggregated": false } },
+              { "name": "q_tools", "query": { "datasetName": "ds_top_tools", "parameters": [ { "name": "lookback_days", "keyword": "lookback_days" } ], "disaggregated": false } },
+              { "name": "q_memory", "query": { "datasetName": "ds_memory_reads", "parameters": [ { "name": "lookback_days", "keyword": "lookback_days" } ], "disaggregated": false } },
+              { "name": "q_tokens", "query": { "datasetName": "ds_tokens_by_day", "parameters": [ { "name": "lookback_days", "keyword": "lookback_days" } ], "disaggregated": false } },
+              { "name": "q_users", "query": { "datasetName": "ds_traffic_by_user", "parameters": [ { "name": "lookback_days", "keyword": "lookback_days" } ], "disaggregated": false } },
+              { "name": "q_convos", "query": { "datasetName": "ds_conversations", "parameters": [ { "name": "lookback_days", "keyword": "lookback_days" } ], "disaggregated": false } }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "filter-single-select",
+              "frame": { "showTitle": true, "title": "Lookback window (days)" },
+              "encodings": {
+                "fields": [
+                  { "fieldName": "lookback_days", "displayName": "Lookback (days)", "queryName": "q_choices" },
+                  { "parameterName": "lookback_days", "queryName": "q_kpis" },
+                  { "parameterName": "lookback_days", "queryName": "q_judge_overall" },
+                  { "parameterName": "lookback_days", "queryName": "q_state" },
+                  { "parameterName": "lookback_days", "queryName": "q_traffic" },
+                  { "parameterName": "lookback_days", "queryName": "q_judge_scorer" },
+                  { "parameterName": "lookback_days", "queryName": "q_tools" },
+                  { "parameterName": "lookback_days", "queryName": "q_memory" },
+                  { "parameterName": "lookback_days", "queryName": "q_tokens" },
+                  { "parameterName": "lookback_days", "queryName": "q_users" },
+                  { "parameterName": "lookback_days", "queryName": "q_convos" }
+                ]
+              }
+            }
+          },
+          "position": { "x": 9, "y": 0, "width": 3, "height": 2 }
+        },
+
+        {
+          "widget": {
+            "name": "w_sec_health",
+            "multilineTextboxSpec": { "lines": [ "## Health at a glance" ] }
+          },
+          "position": { "x": 0, "y": 2, "width": 12, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "w_kpi_turns",
+            "queries": [ { "name": "main_query", "query": { "datasetName": "ds_kpis", "fields": [ { "name": "turns", "expression": "`turns`" } ], "disaggregated": true } } ],
+            "spec": {
+              "version": 2, "widgetType": "counter",
+              "frame": { "showTitle": true, "title": "Agent turns" },
+              "encodings": { "value": { "fieldName": "turns", "displayName": "Turns", "format": { "type": "number-plain", "abbreviation": "compact", "decimalPlaces": { "type": "exact", "places": 0 } } } }
+            }
+          },
+          "position": { "x": 0, "y": 3, "width": 2, "height": 3 }
+        },
+        {
+          "widget": {
+            "name": "w_kpi_p95",
+            "queries": [ { "name": "main_query", "query": { "datasetName": "ds_kpis", "fields": [ { "name": "p95_s", "expression": "`p95_s`" } ], "disaggregated": true } } ],
+            "spec": {
+              "version": 2, "widgetType": "counter",
+              "frame": { "showTitle": true, "title": "p95 latency (s)" },
+              "encodings": { "value": { "fieldName": "p95_s", "displayName": "p95 seconds", "format": { "type": "number-plain", "decimalPlaces": { "type": "exact", "places": 1 } } } }
+            }
+          },
+          "position": { "x": 2, "y": 3, "width": 3, "height": 3 }
+        },
+        {
+          "widget": {
+            "name": "w_kpi_error",
+            "queries": [ { "name": "main_query", "query": { "datasetName": "ds_kpis", "fields": [ { "name": "error_rate", "expression": "`error_rate`" } ], "disaggregated": true } } ],
+            "spec": {
+              "version": 2, "widgetType": "counter",
+              "frame": { "showTitle": true, "title": "Error rate" },
+              "encodings": { "value": { "fieldName": "error_rate", "displayName": "Error rate", "format": { "type": "number-percent", "decimalPlaces": { "type": "exact", "places": 1 } } } }
+            }
+          },
+          "position": { "x": 5, "y": 3, "width": 2, "height": 3 }
+        },
+        {
+          "widget": {
+            "name": "w_kpi_judge",
+            "queries": [ { "name": "main_query", "query": { "datasetName": "ds_judge_overall", "fields": [ { "name": "overall_pass_rate", "expression": "`overall_pass_rate`" } ], "disaggregated": true } } ],
+            "spec": {
+              "version": 2, "widgetType": "counter",
+              "frame": { "showTitle": true, "title": "Judge pass rate" },
+              "encodings": { "value": { "fieldName": "overall_pass_rate", "displayName": "Pass rate", "format": { "type": "number-percent", "decimalPlaces": { "type": "exact", "places": 1 } } } }
+            }
+          },
+          "position": { "x": 7, "y": 3, "width": 3, "height": 3 }
+        },
+        {
+          "widget": {
+            "name": "w_kpi_tokens",
+            "queries": [ { "name": "main_query", "query": { "datasetName": "ds_kpis", "fields": [ { "name": "median_tokens", "expression": "`median_tokens`" } ], "disaggregated": true } } ],
+            "spec": {
+              "version": 2, "widgetType": "counter",
+              "frame": { "showTitle": true, "title": "Median tokens / turn" },
+              "encodings": { "value": { "fieldName": "median_tokens", "displayName": "Median tokens", "format": { "type": "number-plain", "abbreviation": "compact", "decimalPlaces": { "type": "exact", "places": 1 } } } }
+            }
+          },
+          "position": { "x": 10, "y": 3, "width": 2, "height": 3 }
+        },
+
+        {
+          "widget": {
+            "name": "w_sec_traffic",
+            "multilineTextboxSpec": { "lines": [ "## Traffic & reliability" ] }
+          },
+          "position": { "x": 0, "y": 6, "width": 12, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "w_traffic_by_day",
+            "queries": [ { "name": "main_query", "query": { "datasetName": "ds_traffic_by_day", "fields": [ { "name": "day", "expression": "`day`" }, { "name": "requests", "expression": "`requests`" }, { "name": "errors", "expression": "`errors`" } ], "disaggregated": true } } ],
+            "spec": {
+              "version": 3, "widgetType": "line",
+              "frame": { "showTitle": true, "title": "Agent turns per day (with errors)" },
+              "encodings": {
+                "x": { "fieldName": "day", "displayName": "Day", "scale": { "type": "temporal" } },
+                "y": { "scale": { "type": "quantitative" }, "fields": [ { "fieldName": "requests", "displayName": "Turns" }, { "fieldName": "errors", "displayName": "Errors" } ] }
+              },
+              "mark": { "colors": [ "#3B6BA5", "#FF3621" ] }
+            }
+          },
+          "position": { "x": 0, "y": 7, "width": 8, "height": 5 }
+        },
+        {
+          "widget": {
+            "name": "w_outcome_pie",
+            "queries": [ { "name": "main_query", "query": { "datasetName": "ds_state_breakdown", "fields": [ { "name": "outcome", "expression": "`outcome`" }, { "name": "turns", "expression": "`turns`" } ], "disaggregated": true } } ],
+            "spec": {
+              "version": 3, "widgetType": "pie",
+              "frame": { "showTitle": true, "title": "Turn outcomes" },
+              "encodings": {
+                "angle": { "fieldName": "turns", "displayName": "Turns", "scale": { "type": "quantitative" } },
+                "color": { "fieldName": "outcome", "displayName": "Outcome", "scale": { "type": "categorical", "mappings": [ { "value": "OK", "color": "#00A972" }, { "value": "Error", "color": "#FF3621" } ] } }
+              }
+            }
+          },
+          "position": { "x": 8, "y": 7, "width": 4, "height": 5 }
+        },
+
+        {
+          "widget": {
+            "name": "w_sec_quality",
+            "multilineTextboxSpec": { "lines": [ "## Response quality — LLM judges & code scorers" ] }
+          },
+          "position": { "x": 0, "y": 12, "width": 12, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "w_judge_by_scorer",
+            "queries": [ { "name": "main_query", "query": { "datasetName": "ds_judge_by_scorer", "fields": [ { "name": "scorer", "expression": "`scorer`" }, { "name": "pass_pct", "expression": "`pass_pct`" } ], "disaggregated": true } } ],
+            "spec": {
+              "version": 3, "widgetType": "bar",
+              "frame": { "showTitle": true, "title": "Pass rate by scorer (%)" },
+              "encodings": {
+                "x": { "fieldName": "scorer", "displayName": "Scorer", "scale": { "type": "categorical", "sort": { "by": "y-reversed" } } },
+                "y": { "fieldName": "pass_pct", "displayName": "Pass %", "scale": { "type": "quantitative" } },
+                "label": { "show": true }
+              },
+              "mark": { "colors": [ "#3B6BA5" ] }
+            }
+          },
+          "position": { "x": 0, "y": 13, "width": 8, "height": 6 }
+        },
+        {
+          "widget": {
+            "name": "w_judge_overall_counter",
+            "queries": [ { "name": "main_query", "query": { "datasetName": "ds_judge_overall", "fields": [ { "name": "overall_pass_rate", "expression": "`overall_pass_rate`" } ], "disaggregated": true } } ],
+            "spec": {
+              "version": 2, "widgetType": "counter",
+              "frame": { "showTitle": true, "title": "Overall pass rate" },
+              "encodings": { "value": { "fieldName": "overall_pass_rate", "displayName": "Pass rate", "format": { "type": "number-percent", "decimalPlaces": { "type": "exact", "places": 1 } } } }
+            }
+          },
+          "position": { "x": 8, "y": 13, "width": 4, "height": 3 }
+        },
+        {
+          "widget": {
+            "name": "w_assessments_counter",
+            "queries": [ { "name": "main_query", "query": { "datasetName": "ds_judge_overall", "fields": [ { "name": "assessments", "expression": "`assessments`" } ], "disaggregated": true } } ],
+            "spec": {
+              "version": 2, "widgetType": "counter",
+              "frame": { "showTitle": true, "title": "Assessments scored" },
+              "encodings": { "value": { "fieldName": "assessments", "displayName": "Assessments", "format": { "type": "number-plain", "abbreviation": "compact", "decimalPlaces": { "type": "exact", "places": 0 } } } }
+            }
+          },
+          "position": { "x": 8, "y": 16, "width": 4, "height": 3 }
+        },
+
+        {
+          "widget": {
+            "name": "w_sec_tools",
+            "multilineTextboxSpec": { "lines": [ "## Tools & memory" ] }
+          },
+          "position": { "x": 0, "y": 19, "width": 12, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "w_top_tools",
+            "queries": [ { "name": "main_query", "query": { "datasetName": "ds_top_tools", "fields": [ { "name": "tool_name", "expression": "`tool_name`" }, { "name": "invocations", "expression": "`invocations`" }, { "name": "p50_ms", "expression": "`p50_ms`" }, { "name": "p95_ms", "expression": "`p95_ms`" } ], "disaggregated": true } } ],
+            "spec": {
+              "version": 2, "widgetType": "table",
+              "frame": { "showTitle": true, "title": "Top tools by invocation" },
+              "encodings": {
+                "columns": [
+                  { "fieldName": "tool_name", "displayName": "Tool" },
+                  { "fieldName": "invocations", "displayName": "Invocations" },
+                  { "fieldName": "p50_ms", "displayName": "p50 ms" },
+                  { "fieldName": "p95_ms", "displayName": "p95 ms" }
+                ]
+              }
+            }
+          },
+          "position": { "x": 0, "y": 20, "width": 7, "height": 6 }
+        },
+        {
+          "widget": {
+            "name": "w_memory_reads",
+            "queries": [ { "name": "main_query", "query": { "datasetName": "ds_memory_reads", "fields": [ { "name": "memory_reads", "expression": "`memory_reads`" }, { "name": "turns", "expression": "`turns`" } ], "disaggregated": true } } ],
+            "spec": {
+              "version": 3, "widgetType": "bar",
+              "frame": { "showTitle": true, "title": "get_user_memory calls per turn" },
+              "encodings": {
+                "x": { "fieldName": "memory_reads", "displayName": "Memory reads", "scale": { "type": "categorical", "sort": { "by": "x" } } },
+                "y": { "fieldName": "turns", "displayName": "Turns", "scale": { "type": "quantitative" } },
+                "label": { "show": true }
+              },
+              "mark": { "colors": [ "#5B8C5A" ] }
+            }
+          },
+          "position": { "x": 7, "y": 20, "width": 5, "height": 6 }
+        },
+
+        {
+          "widget": {
+            "name": "w_sec_tokens",
+            "multilineTextboxSpec": { "lines": [ "## Tokens & cost" ] }
+          },
+          "position": { "x": 0, "y": 26, "width": 12, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "w_tokens_note",
+            "multilineTextboxSpec": { "lines": [ "Output tokens are the generated response cost. Input tokens are large because each turn carries the system prompt, tool results, and retrieved document context — shown here as a window total rather than charted." ] }
+          },
+          "position": { "x": 0, "y": 27, "width": 6, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "w_total_input",
+            "queries": [ { "name": "main_query", "query": { "datasetName": "ds_kpis", "fields": [ { "name": "total_input_tokens", "expression": "`total_input_tokens`" } ], "disaggregated": true } } ],
+            "spec": {
+              "version": 2, "widgetType": "counter",
+              "frame": { "showTitle": true, "title": "Input tokens (window)" },
+              "encodings": { "value": { "fieldName": "total_input_tokens", "displayName": "Input tokens", "format": { "type": "number-plain", "abbreviation": "compact", "decimalPlaces": { "type": "exact", "places": 1 } } } }
+            }
+          },
+          "position": { "x": 0, "y": 28, "width": 3, "height": 3 }
+        },
+        {
+          "widget": {
+            "name": "w_total_output",
+            "queries": [ { "name": "main_query", "query": { "datasetName": "ds_kpis", "fields": [ { "name": "total_output_tokens", "expression": "`total_output_tokens`" } ], "disaggregated": true } } ],
+            "spec": {
+              "version": 2, "widgetType": "counter",
+              "frame": { "showTitle": true, "title": "Output tokens (window)" },
+              "encodings": { "value": { "fieldName": "total_output_tokens", "displayName": "Output tokens", "format": { "type": "number-plain", "abbreviation": "compact", "decimalPlaces": { "type": "exact", "places": 1 } } } }
+            }
+          },
+          "position": { "x": 3, "y": 28, "width": 3, "height": 3 }
+        },
+        {
+          "widget": {
+            "name": "w_tokens_by_day",
+            "queries": [ { "name": "main_query", "query": { "datasetName": "ds_tokens_by_day", "fields": [ { "name": "day", "expression": "`day`" }, { "name": "output_tokens", "expression": "`output_tokens`" } ], "disaggregated": true } } ],
+            "spec": {
+              "version": 3, "widgetType": "area",
+              "frame": { "showTitle": true, "title": "Output tokens per day" },
+              "encodings": {
+                "x": { "fieldName": "day", "displayName": "Day", "scale": { "type": "temporal" } },
+                "y": { "fieldName": "output_tokens", "displayName": "Output tokens", "scale": { "type": "quantitative" } }
+              },
+              "mark": { "colors": [ "#C98A3B" ] }
+            }
+          },
+          "position": { "x": 6, "y": 27, "width": 6, "height": 4 }
+        },
+
+        {
+          "widget": {
+            "name": "w_sec_detail",
+            "multilineTextboxSpec": { "lines": [ "## Detailed breakdowns" ] }
+          },
+          "position": { "x": 0, "y": 31, "width": 12, "height": 1 }
+        },
+        {
+          "widget": {
+            "name": "w_traffic_by_user",
+            "queries": [ { "name": "main_query", "query": { "datasetName": "ds_traffic_by_user", "fields": [ { "name": "user_email", "expression": "`user_email`" }, { "name": "turns", "expression": "`turns`" }, { "name": "avg_latency_s", "expression": "`avg_latency_s`" }, { "name": "error_turns", "expression": "`error_turns`" } ], "disaggregated": true } } ],
+            "spec": {
+              "version": 2, "widgetType": "table",
+              "frame": { "showTitle": true, "title": "Traffic by user" },
+              "encodings": {
+                "columns": [
+                  { "fieldName": "user_email", "displayName": "User" },
+                  { "fieldName": "turns", "displayName": "Turns" },
+                  { "fieldName": "avg_latency_s", "displayName": "Avg latency (s)" },
+                  { "fieldName": "error_turns", "displayName": "Error turns" }
+                ]
+              }
+            }
+          },
+          "position": { "x": 0, "y": 32, "width": 6, "height": 6 }
+        },
+        {
+          "widget": {
+            "name": "w_conversations",
+            "queries": [ { "name": "main_query", "query": { "datasetName": "ds_conversations", "fields": [ { "name": "conversation_id", "expression": "`conversation_id`" }, { "name": "turns", "expression": "`turns`" }, { "name": "total_latency_s", "expression": "`total_latency_s`" }, { "name": "started_at", "expression": "`started_at`" }, { "name": "last_turn_at", "expression": "`last_turn_at`" } ], "disaggregated": true } } ],
+            "spec": {
+              "version": 2, "widgetType": "table",
+              "frame": { "showTitle": true, "title": "Conversations (multi-turn sessions)" },
+              "encodings": {
+                "columns": [
+                  { "fieldName": "conversation_id", "displayName": "Conversation" },
+                  { "fieldName": "turns", "displayName": "Turns" },
+                  { "fieldName": "total_latency_s", "displayName": "Total latency (s)" },
+                  { "fieldName": "started_at", "displayName": "Started" },
+                  { "fieldName": "last_turn_at", "displayName": "Last turn" }
+                ]
+              }
+            }
+          },
+          "position": { "x": 6, "y": 32, "width": 6, "height": 6 }
+        }
+      ]
+    }
+  ],
+  "uiSettings": { "theme": { "widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED" } }
+}

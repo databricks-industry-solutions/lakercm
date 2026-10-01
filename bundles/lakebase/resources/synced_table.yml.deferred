@@ -1,0 +1,124 @@
+# =============================================================================
+# Postgres Synced Table — Gold Extraction Labels   (NOT YET ACTIVE — see below)
+# =============================================================================
+# STATUS: this file is correct and schema-valid, but is kept `.deferred` on
+# purpose. The `.deferred` suffix excludes it from `resources/*.yml`.
+#
+# It is NOT active because the LIVE synced table is not in this bundle's
+# terraform state. `bundle plan` against this file reads
+# "1 to add" — and that create would fail with "already exists", which matters
+# because scripts/bundle_registry.py has `apps` NEEDING `lakebase`, so a
+# lakebase failure breaks the whole deploy chain.
+#
+# TO ADOPT (deliberate, causes a short outage — do not do this incidentally):
+#   0. Confirm the workspace preview is ON: Settings -> Previews ->
+#      "Lakebase Accelerated Sync" / "LTAP Direct Writes". There is NO API for
+#      this, and `accelerated_sync` is WRITE-ONLY (absent from every GET), so
+#      it can only be confirmed here and by the create succeeding.
+#      If it is OFF, delete the `accelerated_sync: true` line below and adopt
+#      via `bundle deployment bind` instead — no delete, no outage.
+#   1. Snapshot the live spec, then delete it (this also retires its pipeline):
+#        databricks database delete-synced-database-table \
+#          <catalog>.lakercm.gold_extraction_labels_sync \
+#          --purge-data --profile <profile>
+#   2. Drop the `.deferred` suffix from this file.
+#   3. `databricks bundle plan -t prod` MUST read exactly
+#      "1 to add, 0 to change, 0 to delete". Abort on anything else —
+#      especially any destroy against the Lakebase project/branch/endpoint.
+#   4. `databricks bundle deploy -t prod`, then wait for
+#      SYNCED_TABLE_ONLINE_CONTINUOUS_UPDATE.
+#   5. IMMEDIATELY add + apply a NEW alembic revision re-asserting
+#      USAGE + SELECT on schema lakercm (see the note at the bottom).
+#      Do NOT pre-stage that revision before step 1: alembic would mark it
+#      applied while the OLD table is still in place, and it would then not
+#      re-run after the recreate — burning the revision and leaving both apps
+#      on `permission denied for table gold_extraction_labels_sync`.
+#
+# Adopt by delete + fresh CREATE, NOT by `bundle deployment bind` — see the
+# incomplete-state REPLACE hazard documented in lakebase.yml.
+# =============================================================================
+#
+# Why this is expressible at all now: CLI v1.15.0 ships the
+# `postgres_synced_tables` resource (terraform provider 1.128.0,
+# `databricks_postgres_synced_table`). The older `synced_database_tables`
+# shape this file used to carry has NO terraform resource at all, which is why
+# this was a rewrite and not a rename.
+# =============================================================================
+#
+# ORIGINAL NOTES
+# =============================================================================
+# Syncs the gold_extraction_labels UC table into the Lakebase Postgres database
+# so both apps can query it directly (reviewer_app/services/lakehouse_db.py and
+# agent_app/services/lakehouse_db.py; agent_app/agent/tools.py JOINs it).
+#
+# scheduling_policy: CONTINUOUS — tails the Change Data Feed on
+# gold_extraction_labels (CDF already enabled on the source). New rows land in
+# Lakebase within seconds of each documents-pipeline run completing, without
+# the documents pipeline itself needing to be continuous.
+#
+# accelerated_sync: [Private Preview] bulk-loads the INITIAL snapshot straight
+# into branch storage. It cannot be toggled on an existing synced table — the
+# table has to be dropped and recreated — and under CONTINUOUS it only speeds
+# up that first load; ongoing changes stay incremental CDF. Requires Postgres
+# 17 (satisfied: pg_version 17) plus workspace-level enablement of the
+# "Lakebase Accelerated Sync" / "LTAP Direct Writes" preview. There is NO API
+# to read this flag back — it is write-only and absent from every GET response
+# — so it can only be confirmed by the create call succeeding.
+#
+# lifecycle.prevent_destroy is a deliberate seatbelt: see the REPLACE hazard
+# documented in lakebase.yml. Any plan that would drop this table fails loudly
+# instead of silently destroying the Postgres data (and the grants with it).
+#
+# Requires:
+#   1. medical_documents_pipeline has run at least once to materialize
+#      the source streaming table.
+#   2. The Lakebase project/branch is provisioned.
+#
+# NOTE on grants (step 5 above): the sync service OWNS the table it creates, so
+# ALTER DEFAULT PRIVILEGES does not cover it — a recreated table comes back with
+# no grants. The precedent is
+# reviewer_app/migrations/versions/20260420_000013_grant_sync_table_select.py,
+# which does exactly:
+#     CREATE SCHEMA IF NOT EXISTS lakercm
+#     GRANT USAGE ON SCHEMA lakercm TO PUBLIC
+#     GRANT SELECT ON ALL TABLES IN SCHEMA lakercm TO PUBLIC
+# That revision is already applied, so app boot will NOT re-run it. A recreate
+# therefore needs a FRESH revision repeating those grants (the same pattern as
+# 20260530_000028 for the checkpoint role). Open risk to check when you do it:
+# whether the migrating role may GRANT on a sync-service-owned table — if it
+# errors with `must be owner of table`, re-issue as databricks_superuser.
+#
+# This is not a cosmetic outage: agent_app/services/lakehouse_db.py
+# gold_sync_available() probes `SELECT to_regclass(...)`, which returns TRUE as
+# soon as the table exists — so with grants missing the agent stops degrading
+# gracefully and surfaces the raw permission error to the LLM.
+# =============================================================================
+
+resources:
+  postgres_synced_tables:
+    gold_extraction_labels_sync:
+      # synced_table_id names BOTH the UC federated object and the Postgres
+      # table `gold_extraction_labels_sync` in schema `lakercm`.
+      synced_table_id: ${var.catalog}.${var.lakercm_schema}.gold_extraction_labels_sync
+
+      # Lakebase Autoscaling addresses the target as a single branch resource
+      # path (the older provisioned shape used database_instance_name).
+      branch: projects/${var.lakebase_project_id}/branches/${var.lakebase_branch_id}
+      postgres_database: databricks_postgres
+
+      source_table_full_name: ${var.catalog}.${var.lakercm_schema}.gold_extraction_labels
+      scheduling_policy: CONTINUOUS
+
+      primary_key_columns:
+        - document_path
+
+      create_database_objects_if_missing: true
+
+      accelerated_sync: true
+
+      new_pipeline_spec:
+        storage_catalog: ${var.catalog}
+        storage_schema: ${var.lakercm_schema}
+
+      lifecycle:
+        prevent_destroy: true

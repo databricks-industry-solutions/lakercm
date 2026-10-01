@@ -1,0 +1,167 @@
+/* Hold-reason banner.
+   Palette tokens only (design-system.css) so a restyle moves this with it — the
+   previous status components hardcoded literals and silently stopped tracking
+   the palette. */
+
+.hrb {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-4);
+  background: var(--surface-raised);
+}
+
+.hrb--held {
+  border-left-color: var(--warning-500);
+  background: var(--warning-bg);
+}
+
+.hrb--auto {
+  border-left-color: var(--success-500);
+  background: var(--success-bg);
+}
+
+.hrb--unknown {
+  border-left-color: var(--neutral-400);
+  background: var(--surface-sunken);
+}
+
+.hrb-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-sm);
+  font-weight: var(--font-bold);
+  color: white;
+}
+
+.hrb--held .hrb-icon { background: var(--warning-600); }
+.hrb--auto .hrb-icon { background: var(--success-600); }
+.hrb--unknown .hrb-icon { background: var(--neutral-500); }
+
+.hrb-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.hrb-body > strong {
+  font-size: var(--text-base);
+  color: var(--text-primary);
+}
+
+.hrb-summary,
+.hrb-degraded {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.hrb-degraded {
+  font-style: italic;
+}
+
+.hrb-reasons {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.hrb-reason {
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+}
+
+/* Advisory rows are deliberately quieter: they did not cause the hold, and
+   giving them equal weight would misstate why the document is on this screen. */
+.hrb-reason--advisory {
+  background: transparent;
+  border-style: dashed;
+}
+
+.hrb-reason-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-bottom: var(--space-1);
+}
+
+.hrb-reason-title {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+}
+
+.hrb-reason-code,
+.hrb-candidate {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+.hrb-candidate {
+  margin-right: var(--space-1);
+}
+
+.hrb-reason-field {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.hrb-reason-detail,
+.hrb-reason-guidance,
+.hrb-reason-candidates {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.hrb-reason-guidance {
+  margin-top: var(--space-1);
+  color: var(--text-primary);
+}
+
+.hrb-reason-candidates {
+  margin-top: var(--space-2);
+}
+
+.hrb-advisory {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.hrb-advisory-label {
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.hrb-more {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}

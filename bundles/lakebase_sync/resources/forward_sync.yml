@@ -1,0 +1,63 @@
+# =============================================================================
+# gold_extraction_labels -> Lakebase (dev)
+# =============================================================================
+# CONTINUOUS, and deliberately the one piece of always-on compute in dev.
+#
+# It was TRIGGERED, on the convention that dev runs no background compute. That
+# cost more than it saved. Measured on the triggered copy, two updates spent 26s
+# and 166s of their 35s and 174s wall clock purely acquiring Lakeflow serverless
+# compute, against 8.5s of actual data movement — the schedule was the latency,
+# not the data. Worse, nothing triggered it outside a deploy: the
+# documents-refresh job has no forward-sync task and its file-arrival trigger is
+# PAUSED in dev, so a generated batch reached gold and stopped there until
+# someone deployed. Continuous applies each Change Data Feed commit within
+# seconds and needs no trigger at all, which is what the apps already assume.
+#
+# accelerated_sync — the platform calls it LTAP Direct Writes (Beta) — writes the
+# bulk load straight into the branch's storage layer instead of routing it
+# through the live compute endpoint. It needs Postgres 17 (dev is on 17) and the
+# LTAP Direct Writes preview enabled for the workspace. Note the scope: on a
+# CONTINUOUS copy it covers the INITIAL LOAD only, because later updates arrive
+# incrementally through the Change Data Feed rather than as bulk loads. So it is
+# the create that benefits, not the steady state.
+#
+# A synced table CANNOT be updated in place: the update API is unimplemented
+# ("updating a synced database table is not yet supported") and w.postgres has no
+# update method at all. Every change here — including both of the above — is a
+# destroy + create of the Postgres table the reviewer app, the agent's document
+# tools and the embedding job read. prevent_destroy is therefore the default and
+# has to be lowered ON PURPOSE for the deploy that changes the spec.
+#
+# create_database_objects_if_missing lets the sync create the Postgres schema and
+# table on a fresh project. The sync service OWNS what it creates, so
+# ALTER DEFAULT PRIVILEGES does not reach it: scripts/refresh_forward_sync.py
+# re-asserts the app grants, and migration 20260926_000032 covers an app boot
+# that beats the deploy.
+# =============================================================================
+
+targets:
+  dev:
+    resources:
+      postgres_synced_tables:
+        gold_extraction_labels_sync:
+          synced_table_id: ${var.catalog}.${var.lakercm_schema}.gold_extraction_labels_sync
+          branch: projects/${var.lakebase_project_id}/branches/${var.lakebase_branch_id}
+          postgres_database: databricks_postgres
+          source_table_full_name: ${var.catalog}.${var.lakercm_schema}.gold_extraction_labels
+          scheduling_policy: CONTINUOUS
+          accelerated_sync: true
+          primary_key_columns:
+            - document_path
+          create_database_objects_if_missing: true
+          new_pipeline_spec:
+            storage_catalog: ${var.catalog}
+            storage_schema: ${var.lakercm_schema}
+          lifecycle:
+            # UP, and this is the steady state. A synced table cannot be updated
+            # in place, so ANY spec change above — the policy, the primary key,
+            # accelerated_sync — is a destroy + create of the table the reviewer
+            # app, the agent's document tools and the embedding job read, and
+            # this refuses it. Lower it in the same commit as that spec change
+            # and restore it in the next one: the CONTINUOUS + accelerated_sync
+            # switch went in with it down, and the new copy is online.
+            prevent_destroy: true

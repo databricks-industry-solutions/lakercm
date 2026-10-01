@@ -1,0 +1,29 @@
+# =============================================================================
+# LakeRCM — Observability bundle
+# =============================================================================
+# AI/BI dashboard + DBSQL alerts over the agent's UC-managed OTEL trace tables
+# (${var.catalog}.${var.lakercm_schema}.agent_traces_otel_*). A net-new,
+# read-only consumer of those tables + the bundle-managed app warehouse.
+# Promotes the former hand-run observability runbook into a deployable resource.
+# Deploys last in the dependency DAG; nothing depends on it.
+#
+#   ./scripts/deploy.sh --target prod --only observability
+# =============================================================================
+
+bundle:
+  name: lakercm-observability
+
+include:
+  - ../_shared/variables.yml
+  - ../_shared/targets.yml
+  - resources/*.yml
+
+variables:
+  # Declared locally (not in _shared) because the CLI eagerly resolves every
+  # declared lookup; only bundles that consume the warehouse should carry it.
+  # Resolves the bundle-managed app warehouse by name -> the dashboard's
+  # warehouse_id. app_warehouse_name comes from the shared variables.yml.
+  app_warehouse_id:
+    description: "ID of the bundle-managed app SQL warehouse (resolved by name)"
+    lookup:
+      warehouse: ${var.app_warehouse_name}

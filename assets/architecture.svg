@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="590" viewBox="0 0 1200 590" role="img" aria-labelledby="arch-title arch-desc">
+  <title id="arch-title">LakeRCM architecture</title>
+  <desc id="arch-desc">Three layers on one Unity Catalog data plane. Lakehouse intelligence parses, understands, checks and scores documents. Operational insights routes them by confidence to the reviewer app, Lakebase and the agent. The learning loop syncs reviews back for analytics and Genie, and improves the agent through MLflow evaluation and gated GEPA prompt optimization.</desc>
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 Z" fill="#5A6B72"/>
+    </marker>
+    <style>
+      .panel { stroke-width: 1.2; }
+      .box { fill: #FFFFFF; stroke: #D3DCE0; stroke-width: 1.2; }
+      .t { font-family: 'Segoe UI', 'Helvetica Neue', Helvetica, Arial, sans-serif; }
+      .bt { font-size: 14px; font-weight: 600; fill: #1B3139; }
+      .bs { font-size: 12px; fill: #5F6F76; }
+      .pt { font-size: 16px; font-weight: 700; fill: #1B3139; }
+      .ps { font-size: 12px; fill: #5F6F76; }
+      .num { font-size: 13px; font-weight: 700; fill: #FFFFFF; }
+      .edge { fill: none; stroke: #5A6B72; stroke-width: 1.8; }
+      .back { stroke-dasharray: 6 5; }
+      .lbl { font-size: 11px; fill: #3E4F56; }
+      .pill { fill: #FFFFFF; stroke: #D3DCE0; stroke-width: 1; }
+    </style>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="590" rx="18" fill="#FFFFFF"/>
+
+  <!-- ===================== Layer 1: Lakehouse intelligence ===================== -->
+  <rect class="panel" x="24" y="24" width="368" height="470" rx="16" fill="#F3F6F8" stroke="#DCE3E7"/>
+  <circle cx="54" cy="50" r="12" fill="#1B3139"/>
+  <text class="t num" x="54" y="55" text-anchor="middle">1</text>
+  <text class="t pt" x="74" y="56">Lakehouse intelligence</text>
+  <text class="t ps" x="44" y="78">Lakeflow pipelines + AI Functions</text>
+
+  <rect class="box" x="48" y="94" width="320" height="56" rx="10"/>
+  <text class="t bt" x="208" y="118" text-anchor="middle">Documents arrive</text>
+  <text class="t bs" x="208" y="137" text-anchor="middle">PDFs and images in a Unity Catalog volume</text>
+
+  <rect class="box" x="48" y="176" width="320" height="56" rx="10"/>
+  <text class="t bt" x="208" y="200" text-anchor="middle">Bronze · parse</text>
+  <text class="t bs" x="208" y="219" text-anchor="middle">ai_parse_document</text>
+
+  <rect class="box" x="48" y="258" width="320" height="56" rx="10"/>
+  <text class="t bt" x="208" y="282" text-anchor="middle">Silver · understand and check</text>
+  <text class="t bs" x="208" y="301" text-anchor="middle">ai_classify · ai_extract · code validation · CARC</text>
+
+  <rect class="box" x="48" y="340" width="320" height="56" rx="10"/>
+  <text class="t bt" x="208" y="364" text-anchor="middle">Gold · score</text>
+  <text class="t bs" x="208" y="383" text-anchor="middle">composite confidence · claim codes</text>
+
+  <rect class="box" x="48" y="422" width="320" height="56" rx="10"/>
+  <text class="t bt" x="208" y="446" text-anchor="middle">Reference data</text>
+  <text class="t bs" x="208" y="465" text-anchor="middle">ICD-10-CM · CPT/HCPCS · CARC · payer policies</text>
+
+  <path class="edge" d="M208 150 V174" marker-end="url(#arr)"/>
+  <path class="edge" d="M208 232 V256" marker-end="url(#arr)"/>
+  <path class="edge" d="M208 314 V338" marker-end="url(#arr)"/>
+  <path class="edge" d="M48 450 C 30 450, 30 286, 45 286" marker-end="url(#arr)"/>
+
+  <!-- ===================== Layer 2: Operational insights ===================== -->
+  <rect class="panel" x="416" y="24" width="368" height="470" rx="16" fill="#FFF5F2" stroke="#F6DDD6"/>
+  <circle cx="446" cy="50" r="12" fill="#FF3621"/>
+  <text class="t num" x="446" y="55" text-anchor="middle">2</text>
+  <text class="t pt" x="466" y="56">Operational insights</text>
+  <text class="t ps" x="436" y="78">Databricks Apps + Lakebase</text>
+
+  <rect class="box" x="440" y="94" width="320" height="72" rx="10"/>
+  <text class="t bt" x="600" y="119" text-anchor="middle">Route by confidence</text>
+  <text class="t bs" x="600" y="138" text-anchor="middle">≥ 0.92 · auto-verified</text>
+  <text class="t bs" x="600" y="155" text-anchor="middle">&lt; 0.92 · a clinician reviews it</text>
+
+  <rect class="box" x="440" y="190" width="320" height="56" rx="10"/>
+  <text class="t bt" x="600" y="214" text-anchor="middle">Reviewer app</text>
+  <text class="t bs" x="600" y="233" text-anchor="middle">React + FastAPI on Databricks Apps</text>
+
+  <rect class="box" x="440" y="270" width="320" height="56" rx="10"/>
+  <text class="t bt" x="600" y="294" text-anchor="middle">Lakebase Postgres</text>
+  <text class="t bs" x="600" y="313" text-anchor="middle">reviews · audit trail · agent memory · search</text>
+
+  <rect class="box" x="440" y="350" width="320" height="56" rx="10"/>
+  <text class="t bt" x="600" y="374" text-anchor="middle">Agent app</text>
+  <text class="t bs" x="600" y="393" text-anchor="middle">LangGraph assistant that cites payer policy</text>
+
+  <rect class="box" x="440" y="430" width="320" height="52" rx="10"/>
+  <text class="t bt" x="600" y="452" text-anchor="middle">AI Gateway · Vector Search</text>
+  <text class="t bs" x="600" y="470" text-anchor="middle">governed models · policy retrieval</text>
+
+  <path class="edge" d="M600 166 V188" marker-end="url(#arr)"/>
+  <path class="edge" d="M600 248 V268" marker-start="url(#arr)" marker-end="url(#arr)"/>
+  <path class="edge" d="M600 328 V348" marker-start="url(#arr)" marker-end="url(#arr)"/>
+  <path class="edge" d="M600 406 V428" marker-end="url(#arr)"/>
+  <path class="edge" d="M440 218 C 420 218, 420 378, 437 378" marker-end="url(#arr)"/>
+  <rect class="pill" x="400" y="287" width="40" height="18" rx="9"/>
+  <text class="t lbl" x="420" y="300" text-anchor="middle">chat</text>
+
+  <!-- Gold -> routing -->
+  <path class="edge" d="M368 368 C 404 368, 404 130, 437 130" marker-end="url(#arr)"/>
+
+  <!-- ===================== Layer 3: Learning loop ===================== -->
+  <rect class="panel" x="808" y="24" width="368" height="470" rx="16" fill="#F0F8F4" stroke="#D5EBDF"/>
+  <circle cx="838" cy="50" r="12" fill="#00A972"/>
+  <text class="t num" x="838" y="55" text-anchor="middle">3</text>
+  <text class="t pt" x="858" y="56">Learning loop</text>
+  <text class="t ps" x="828" y="78">Unity Catalog analytics + MLflow 3</text>
+
+  <rect class="box" x="832" y="94" width="320" height="56" rx="10"/>
+  <text class="t bt" x="992" y="118" text-anchor="middle">Lakehouse Sync</text>
+  <text class="t bs" x="992" y="137" text-anchor="middle">review tables stream into Unity Catalog</text>
+
+  <rect class="box" x="832" y="176" width="320" height="56" rx="10"/>
+  <text class="t bt" x="992" y="200" text-anchor="middle">Analytics · semantic layer</text>
+  <text class="t bs" x="992" y="219" text-anchor="middle">metric views · PHI-masked views</text>
+
+  <rect class="box" x="832" y="258" width="320" height="56" rx="10"/>
+  <text class="t bt" x="992" y="282" text-anchor="middle">Genie · AI/BI · alerts</text>
+  <text class="t bs" x="992" y="301" text-anchor="middle">plain-English questions · dashboards · SQL alerts</text>
+
+  <rect class="box" x="832" y="340" width="320" height="56" rx="10"/>
+  <text class="t bt" x="992" y="364" text-anchor="middle">MLflow 3</text>
+  <text class="t bs" x="992" y="383" text-anchor="middle">traces · feedback · judges · evaluation</text>
+
+  <rect class="box" x="832" y="422" width="320" height="56" rx="10"/>
+  <text class="t bt" x="992" y="446" text-anchor="middle">GEPA · promotion gate</text>
+  <text class="t bs" x="992" y="465" text-anchor="middle">a new prompt ships only if it measurably wins</text>
+
+  <path class="edge" d="M992 150 V174" marker-end="url(#arr)"/>
+  <path class="edge" d="M992 232 V256" marker-end="url(#arr)"/>
+  <path class="edge" d="M992 396 V420" marker-end="url(#arr)"/>
+
+  <!-- Lakebase -> Lakehouse Sync -->
+  <path class="edge" d="M760 298 C 796 298, 796 122, 829 122" marker-end="url(#arr)"/>
+  <!-- Agent -> MLflow, and the champion prompt back -->
+  <path class="edge" d="M760 368 C 790 368, 800 362, 829 362" marker-end="url(#arr)"/>
+  <rect class="pill" x="764" y="336" width="64" height="18" rx="9"/>
+  <text class="t lbl" x="796" y="349" text-anchor="middle">traces</text>
+  <path class="edge back" d="M832 450 C 798 450, 796 394, 763 394" marker-end="url(#arr)"/>
+  <rect class="pill" x="754" y="412" width="96" height="18" rx="9"/>
+  <text class="t lbl" x="802" y="425" text-anchor="middle">better prompt</text>
+
+  <!-- ===================== The data plane ===================== -->
+  <rect x="24" y="510" width="1152" height="56" rx="14" fill="#1B3139"/>
+  <text class="t" x="48" y="535" font-size="15" font-weight="700" fill="#FFFFFF">Unity Catalog · one governed data plane</text>
+  <text class="t" x="48" y="554" font-size="12" fill="#C9D6DA">volumes · tables · models · functions · lineage · PHI masks · metric views</text>
+  <text class="t" x="1152" y="545" font-size="12" fill="#C9D6DA" text-anchor="end">Deployed as code with Databricks Asset Bundles</text>
+</svg>

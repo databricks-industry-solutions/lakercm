@@ -1,0 +1,25 @@
+# =============================================================================
+# LakeRCM — Reference-data bundle
+# =============================================================================
+# Synthetic healthcare code-set reference tables (ref_icd10_cm, ref_cpt_hcpcs)
+# that the code-grounding silver step (silver_validate_codes) validates
+# extracted diagnosis/procedure codes against.
+#
+# Like the lakebase bundle, this deploys ZERO terraform resources: reference
+# tables are plain UC Delta tables, not a DAB resource type. Its real job is
+# the RUNTIME seed step the deploy orchestrator runs as a post-deploy hook
+# (scripts/deploy_all.py -> bundle_registry: reference_data.post += seed_reference_data),
+# which shells out to scripts/seed_reference_data.py (idempotent CREATE OR
+# REPLACE via the app warehouse). Deploys right after foundation so the tables
+# exist before the documents pipeline runs the validation step.
+#
+# No external artifact files → no sync.paths override.
+# =============================================================================
+
+bundle:
+  name: lakercm-reference-data
+
+include:
+  - ../_shared/variables.yml
+  - ../_shared/targets.yml
+  - resources/*.yml

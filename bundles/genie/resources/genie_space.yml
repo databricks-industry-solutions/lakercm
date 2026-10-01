@@ -1,0 +1,26 @@
+# Genie space over the analytics gold layer (dim_document, fact_review,
+# fact_document_processing + review_metrics/document_ops_metrics metric views).
+#
+# title/description must stay byte-identical to SPACE_TITLE/SPACE_DESCRIPTION
+# in scripts/genie_space_content.py — the genie_verify post-step asserts this.
+# The title carries var.name_suffix: dev shares a workspace with prod, and the
+# Genie API gave dev's space prod's title plus a timestamp rather than refusing
+# the duplicate. genie_verify reads the resolved title from the bundle.
+# file_path is read VERBATIM (no ${var} interpolation inside the file); the
+# genie_render pre-step rewrites catalog/schema while rendering it.
+#
+# parent_path is the deployer's home, NOT /Shared: where the `users` group
+# inherits CAN_MANAGE from /Shared, that can't be tightened. Everyone gets
+# access via the explicit `users -> CAN_RUN` grant below; the Genie UI lists
+# spaces by grant, not by folder.
+resources:
+  genie_spaces:
+    lakercm_genie_space:
+      title: "LakeRCM Review & Extraction Quality${var.name_suffix}"
+      description: "Ask about extraction accuracy, physician review outcomes, auto-verification, the pending-review backlog, and document pipeline health for LakeRCM medical documents. Covers every uploaded document and every human or automated verdict; data refreshes about every 5 minutes (all times UTC)."
+      warehouse_id: ${var.genie_warehouse_id}
+      parent_path: /Workspace/Users/${var.user_email}/lakercm/genie
+      file_path: ../lakercm.geniespace.json
+      permissions:
+        - level: CAN_RUN
+          group_name: users

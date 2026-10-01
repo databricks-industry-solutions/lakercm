@@ -1,0 +1,216 @@
+# =============================================================================
+# LakeRCM Agent App Resources
+# =============================================================================
+# Standalone LangGraph agent for document intelligence queries.
+# Source code: agent_app/ (repo root)
+#
+# Env vars + command are declared HERE (config:) and ride each deployment via
+# the Apps Deploy API (CLI >= 0.283.0) — same flow as the reviewer app (see
+# resources/app.yml header for the spike evidence). Pod rolls go through
+# `databricks bundle run lakercm_agent_app`; a raw `databricks apps
+# deploy` would DROP this config. The minimal static agent_app/app.yaml keeps
+# only the on-behalf-of-user authorization block + a fallback command.
+# =============================================================================
+
+resources:
+  apps:
+    lakercm_agent_app:
+      name: ${var.agent_app_name}
+      description: "LakeRCM Agent - AI Document Intelligence (LangGraph)"
+      source_code_path: ../../../agent_app
+      # OPT-IN telemetry: empty list (default) = OFF, deploys clean on a fresh
+      # workspace. Set agent_telemetry_export_destinations to enable. NOTE:
+      # agent_app_otel_spans carries LLM I/O (claim text) and MUST be granted
+      # identically to the restricted agent_traces_otel_* tables — see
+      # docs/local-dev-setup.md. See bundles/_shared/variables.yml.
+      telemetry_export_destinations: ${var.agent_telemetry_export_destinations}
+
+      config:
+        command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+        env:
+          # ── Logging / Postgres protocol constants (workspace-agnostic) ────
+          - name: LOG_LEVEL
+            value: "INFO"
+          - name: UVICORN_ACCESS_LOG_LEVEL
+            value: "WARNING"
+          - name: PGDATABASE
+            value: "databricks_postgres"
+          - name: PGPORT
+            value: "5432"
+          - name: PGSSLMODE
+            value: "require"
+          # PGUSER points at the group-backed Lakebase Postgres role, NOT the
+          # individual SP UUID. The agent SP's OAuth token is still the
+          # credential, but the connection sessions-as the group role so the
+          # LangGraph PostgresSaver creates/owns checkpoint_* tables under a
+          # stable role that outlives any specific SP. agent_app/config.py
+          # honors this env var ahead of DATABRICKS_CLIENT_ID.
+          - name: PGUSER
+            value: ${var.checkpoint_role_name}
+
+          # ── MLflow tracing protocol constants ──────────────────────────────
+          - name: MLFLOW_TRACKING_URI
+            value: "databricks"
+          - name: MLFLOW_ENABLE_ASYNC_TRACE_LOGGING
+            value: "true"
+          # ADDITIVE OTLP dual-export flag (empty = OFF). When "true", MLflow
+          # keeps native export AND adds an OTLP exporter. The OTLP endpoint,
+          # protocol, service name, and resource attributes are AUTO-INJECTED by
+          # the Databricks Apps runtime when telemetry is enabled (localhost:4314,
+          # grpc) — MLflow reads the platform's OTEL_EXPORTER_OTLP_ENDPOINT, so we
+          # do NOT set them here.
+          - name: MLFLOW_TRACE_ENABLE_OTLP_DUAL_EXPORT
+            value: ${var.agent_mlflow_trace_enable_otlp_dual_export}
+
+          # ── Prompt versioning aliases ──────────────────────────────────────
+          - name: LAKERCM_CHAMPION_ALIAS
+            value: "champion"
+          - name: LAKERCM_CANDIDATE_ALIAS
+            value: "candidate"
+          - name: LAKERCM_CANDIDATE_TRAFFIC_PCT
+            value: "0"
+
+          # ── Workspace-specific (bundle vars) ───────────────────────────────
+          - name: DATABRICKS_CATALOG
+            value: ${var.catalog}
+          - name: LAKERCM_SCHEMA
+            value: ${var.lakercm_schema}
+          - name: PGHOST
+            value: ${var.lakebase_pg_host}
+          - name: PGAPPNAME
+            value: ${var.agent_app_name}
+          - name: ENDPOINT_NAME
+            value: "projects/${var.lakebase_project_id}/branches/${var.lakebase_branch_id}/endpoints/${var.lakebase_endpoint_id}"
+          - name: PIPELINE_ID
+            value: ${var.documents_pipeline_id}
+          # Agent LLM = the Unity AI Gateway **model service** (UC name
+          # catalog.schema.name), queried via the gateway path in LLM_BASE_PATH
+          # (the OpenAI client appends /responses when LLM_USE_RESPONSES_API).
+          # It fans traffic evenly across several FM destinations with a uniform
+          # reasoning effort + per-conversation session affinity (roster + weights
+          # in the model-service config artifact). Managed as code outside the
+          # bundle (bundles/apps/resources/model_service.config.json); the agent SP
+          # holds a one-time UC EXECUTE grant on it (see AGENTS.md > "Agent gateway
+          # model service"). Reviewer app + GEPA still use bare FM endpoints on
+          # /serving-endpoints.
+          - name: LLM_ENDPOINT
+            value: ${var.agent_llm_endpoint}
+          - name: LLM_BASE_PATH
+            value: ${var.agent_llm_base_path}
+          # Uniform reasoning effort + Responses-API routing for the blend.
+          # /responses lets the gateway normalize one reasoning.effort across
+          # all destination models and lets gpt-5-6-sol tool-call while reasoning.
+          - name: LLM_EFFORT
+            value: ${var.agent_llm_effort}
+          - name: LLM_USE_RESPONSES_API
+            value: ${var.agent_llm_use_responses_api}
+          # ── Complexity-tiered model routing (feature-flagged; default OFF) ──
+          # OFF → the agent uses the single LLM_ENDPOINT blend at LLM_EFFORT,
+          # byte-for-byte unchanged. ON → each conversation is classified once
+          # (via the fast LLM_CLASSIFIER_ENDPOINT on /serving-endpoints) and
+          # pinned to a tier; Phase 1 varies only effort on the blend, Phase 2
+          # also switches to the per-tier model services (LLM_ENDPOINT_LOW/MED/HIGH)
+          # once applied. See docs/complexity-tiered-model-routing.md.
+          # Without these two the tool is DARK: config.py reads them from the
+          # environment, so an unset LAKERCM_KG_ENABLED leaves kg_enabled False
+          # in the running pod and get_all_tools() never registers the traversal
+          # tool. kg_enabled is "false" by default and "true" only on dev, which
+          # is correct -- the ontobricks bundle is dev-only.
+          - name: LAKERCM_KG_ENABLED
+            value: ${var.kg_enabled}
+          - name: LAKERCM_KG_SCHEMA
+            value: ${var.ontobricks_registry_schema}
+          - name: LLM_ROUTING_ENABLED
+            value: ${var.agent_routing_enabled}
+          - name: LLM_ROUTING_DEFAULT_TIER
+            value: ${var.agent_routing_default_tier}
+          # value_from resolves the classifier endpoint name from the
+          # classifier-endpoint app resource below (which also CAN_QUERY-grants
+          # the agent SP). The classifier is a plain FM on /serving-endpoints —
+          # NOT the gateway path in LLM_BASE_PATH — hence LLM_CLASSIFIER_BASE_PATH.
+          - name: LLM_CLASSIFIER_ENDPOINT
+            value_from: classifier-endpoint
+          - name: LLM_CLASSIFIER_EFFORT
+            value: ${var.agent_classifier_effort}
+          - name: LLM_CLASSIFIER_BASE_PATH
+            value: "/serving-endpoints"
+          - name: LLM_CLASSIFIER_TIMEOUT_SECONDS
+            value: ${var.agent_classifier_timeout_seconds}
+          - name: LLM_ROUTING_PIN_TTL_SECONDS
+            value: ${var.agent_routing_pin_ttl_seconds}
+          - name: LLM_ENDPOINT_LOW
+            value: ${var.agent_llm_endpoint_low}
+          - name: LLM_ENDPOINT_MED
+            value: ${var.agent_llm_endpoint_med}
+          - name: LLM_ENDPOINT_HIGH
+            value: ${var.agent_llm_endpoint_high}
+          - name: LLM_EFFORT_LOW
+            value: ${var.agent_effort_low}
+          - name: LLM_EFFORT_MED
+            value: ${var.agent_effort_med}
+          - name: LLM_EFFORT_HIGH
+            value: ${var.agent_effort_high}
+          - name: LAKERCM_GEPA_REFLECTION_MODEL
+            value_from: gepa-endpoint
+
+          # MLFLOW_EXPERIMENT_ID is resolved at runtime by the agent
+          # (mlflow.get_experiment_by_name) so we don't bake the ID in here —
+          # there is also no `experiment` lookup-variable type to resolve it
+          # cross-bundle (the experiment lives in the mlflow bundle).
+          - name: MLFLOW_EXPERIMENT_NAME
+            value: ${var.mlflow_experiment_path}${var.name_suffix}
+          # MLflow tracing stays on the standard warehouse: its backend runs
+          # DDL and writes on the warehouse it is given.
+          - name: MLFLOW_TRACING_SQL_WAREHOUSE_ID
+            value_from: sql-warehouse
+          # The analytics tools (agent/tools.py > _reyden_sql) pin every call
+          # to the Reyden warehouse through the system.ai.dbsql MCP service's
+          # `_meta.warehouse_id`; point lookups stay on Lakebase.
+          - name: DBSQL_MCP_WAREHOUSE_ID
+            value_from: rt-warehouse
+          - name: LAKERCM_LOGGED_MODEL_NAME
+            value: "lakercm_agent${var.name_suffix}"
+          - name: LAKERCM_EVAL_DATASET
+            value: ${var.agent_eval_dataset}
+
+          # ── SP UUIDs (consumed by alembic migrations at import time) ──────
+          - name: AGENT_SP_CLIENT_ID
+            value: ${var.agent_sp_client_id}
+          - name: REVIEWER_SP_CLIENT_ID
+            value: ${var.reviewer_sp_client_id}
+
+      # Typed app resources: value_from sources above + native SP grants
+      # (additive — the SP already holds these via foundation/mlflow bundles).
+      resources:
+        - name: sql-warehouse
+          sql_warehouse:
+            id: ${var.app_warehouse_id}
+            permission: CAN_USE
+        - name: rt-warehouse
+          sql_warehouse:
+            id: ${var.rt_warehouse_id}
+            permission: CAN_USE
+        # NOTE: the agent LLM (the Unity AI Gateway model service) is NOT wired as
+        # an app resource — it's a UC securable, not a serving_endpoint, so the
+        # `serving_endpoint` app-resource type can't grant on it. The agent SP's
+        # query access is a one-time UC EXECUTE grant on the model service
+        # (see AGENTS.md). LLM_ENDPOINT/LLM_BASE_PATH env (above) carry the target.
+        - name: gepa-endpoint
+          serving_endpoint:
+            name: ${var.gepa_reflection_model}
+            permission: CAN_QUERY
+        # Complexity classifier — a plain FM serving endpoint the agent SP must
+        # be able to query. Distinct from the gateway model service (a UC
+        # securable granted via a one-time EXECUTE, not an app resource). Without
+        # this CAN_QUERY grant the classifier call 403s and routing silently
+        # falls to the default tier — so it is wired as a first-class resource.
+        - name: classifier-endpoint
+          serving_endpoint:
+            name: ${var.agent_classifier_endpoint}
+            permission: CAN_QUERY
+
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+        - level: CAN_USE
+          group_name: users

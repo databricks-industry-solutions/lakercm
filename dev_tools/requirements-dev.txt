@@ -1,0 +1,18 @@
+# Linting — pinned to match .pre-commit-config.yaml so local + CI + hooks agree.
+black==26.3.1
+ruff==0.6.9
+
+# Tests
+pytest==9.1.1
+# scripts/tests execute the pipeline SQL, the seed MERGEs and the governance
+# DDL: sqlglot resolves columns and transpiles Databricks SQL to DuckDB, which
+# runs it on fixtures. Without them those tests skip rather than run.
+sqlglot==30.18.0
+duckdb==1.5.5
+
+# Pull in app runtime deps so `pytest agent_app/tests reviewer_app/tests`
+# can import the modules under test, and the synthetic document generator's so
+# scripts/tests/test_synthetic_docgen.py can render its PDFs.
+-r ../agent_app/requirements.txt
+-r ../reviewer_app/requirements.txt
+-r ../synthetic_data/requirements.txt

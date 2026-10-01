@@ -1,0 +1,41 @@
+# LakeRCM Backend Dependencies
+#
+# Supply-chain pinning stance: every dep is exact-pinned (==) and CI resolves
+# them from one trusted index. pip --require-hashes is intentionally NOT used —
+# with exact pins from a trusted index the added protection is marginal, and
+# any --hash flips the whole file into hash-checking mode and couples the Apps
+# build to a generated lockfile. npm carries full SRI integrity; the Actions are
+# SHA-pinned. Full rationale: agent_app/requirements.txt header.
+
+# FastAPI and web server
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+python-multipart==0.0.32
+
+# Data validation
+pydantic==2.13.5
+pydantic-settings==2.15.0
+
+# Databricks SDK (>=0.70.0 required for Lakebase database API)
+databricks-sdk==0.138.0
+
+# PostgreSQL database (Lakebase)
+psycopg[binary]==3.3.5
+psycopg-pool==3.3.1
+alembic==1.19.2
+SQLAlchemy==2.0.52
+
+# OpenTelemetry (Databricks Apps telemetry)
+opentelemetry-distro==0.64b0
+opentelemetry-exporter-otlp-proto-grpc==1.43.0
+opentelemetry-instrumentation-fastapi==0.64b0
+opentelemetry-instrumentation-psycopg==0.64b0
+
+# HTTP client
+httpx==0.28.1
+
+# Utilities
+python-dateutil==2.9.0.post0
+pytz==2026.3.post1
+cachetools==7.1.8
+psutil==7.2.2

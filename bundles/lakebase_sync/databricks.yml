@@ -1,0 +1,24 @@
+# =============================================================================
+# LakeRCM — Lakebase forward sync (dev only)
+# =============================================================================
+# The Lakebase copy of gold_extraction_labels that the reviewer app, the agent
+# and the embedding job read. Its own bundle because it must deploy AFTER the
+# pipelines bundle has materialized the source table, and because dev is the
+# only target it manages: prod's copy was created by hand before this existed
+# and is continuous, so it is deliberately left out of bundle state (adopting it
+# would plan a replace, and `apps` depends on this bundle's success).
+#
+# A synced table's Postgres schema is its Unity Catalog schema, so this one lands
+# in lakercm_dev. The apps follow LAKERCM_SCHEMA, never a literal
+# (scripts/tests/test_schema_parameterization.py).
+#
+# No external artifact files → no sync.paths override.
+# =============================================================================
+
+bundle:
+  name: lakercm-lakebase-sync
+
+include:
+  - ../_shared/variables.yml
+  - ../_shared/targets.yml
+  - resources/*.yml

@@ -1,0 +1,144 @@
+# =============================================================================
+# Databricks App Resources — Reviewer
+# =============================================================================
+# LakeRCM document extraction review application.
+# Source code: reviewer_app/ (repo root)
+#
+# Env vars + command are declared HERE (config:) and ride each deployment via
+# the Apps Deploy API (CLI >= 0.283.0). Resource-typed values (warehouse id,
+# serving-endpoint name) are injected via `value_from` from the `resources:`
+# block, which ALSO grants the app SP the declared permission. Verified live
+# 2026-06-10 (spike): config overrides source-dir app.yaml env wholesale, and
+# a raw `databricks apps deploy` DROPS this config — pod rolls must go through
+# `databricks bundle run` (scripts/deploy_all.py does).
+#
+# The minimal static reviewer_app/app.yaml keeps only the on-behalf-of-user
+# authorization block (not expressible in bundle config) + a fallback command.
+# =============================================================================
+
+resources:
+  apps:
+    lakercm_app:
+      name: ${var.app_name}
+      description: "LakeRCM - Medical Document Extraction Review Platform"
+      source_code_path: ../../../reviewer_app
+      # OPT-IN telemetry: empty list (default) = OFF, deploys clean on a fresh
+      # workspace. Set reviewer_telemetry_export_destinations to enable. See
+      # bundles/_shared/variables.yml.
+      telemetry_export_destinations: ${var.reviewer_telemetry_export_destinations}
+
+      config:
+        # Default = plain uvicorn (telemetry OFF, exactly the pre-telemetry
+        # command). Set reviewer_app_command to the opentelemetry-instrument
+        # variant to turn on OTel export (SDK/exporter setup). See variables.yml.
+        command: ${var.reviewer_app_command}
+        env:
+          # ── Logging / Postgres protocol constants (workspace-agnostic) ────
+          - name: LOG_LEVEL
+            value: "INFO"
+          # OTel knobs used ONLY when the command is the opentelemetry-instrument
+          # variant (telemetry on); inert under plain uvicorn. always_on so every
+          # request span is captured; fastapi + psycopg auto-instrumentation are
+          # disabled because both are instrumented MANUALLY in code — FastAPI with
+          # a query-string PHI-stripping server_request_hook, and psycopg with SQL
+          # text redacted before any Lakebase connection opens. The OTLP endpoint,
+          # protocol, service name, and resource attributes are AUTO-INJECTED by
+          # the Databricks Apps runtime when telemetry is enabled (localhost:4314,
+          # grpc) — do NOT set them here.
+          - name: OTEL_TRACES_SAMPLER
+            value: "always_on"
+          - name: OTEL_PYTHON_DISABLED_INSTRUMENTATIONS
+            value: "fastapi,psycopg"
+          - name: PGDATABASE
+            value: "databricks_postgres"
+          - name: PGPORT
+            value: "5432"
+          - name: PGSSLMODE
+            value: "require"
+          # PGUSER is sourced from DATABRICKS_CLIENT_ID at startup (config.py
+          # validator); the Apps runtime auto-injects DATABRICKS_CLIENT_ID.
+
+          # ── Workspace-specific (bundle vars) ───────────────────────────────
+          - name: DATABRICKS_CATALOG
+            value: ${var.catalog}
+          - name: LAKERCM_SCHEMA
+            value: ${var.lakercm_schema}
+          - name: PGHOST
+            value: ${var.lakebase_pg_host}
+          - name: ENDPOINT_NAME
+            value: "projects/${var.lakebase_project_id}/branches/${var.lakebase_branch_id}/endpoints/${var.lakebase_endpoint_id}"
+          # The analytics routes read the Reyden (Lakehouse//RT) warehouse; the
+          # reviewer app runs no SQL that needs a writable one.
+          # Without these two the KG panel is DARK: reviewer_app/config.py reads
+          # them from the environment, so an unset LAKERCM_KG_ENABLED leaves
+          # kg_enabled False in the running pod and /api/kg reports unavailable.
+          # This is exactly how #88's agent-side KG tool shipped with no way to
+          # tell from outside. kg_enabled is "false" by default and "true" only
+          # on dev, which is correct -- the ontobricks bundle is dev-only.
+          - name: LAKERCM_KG_ENABLED
+            value: ${var.kg_enabled}
+          - name: LAKERCM_KG_SCHEMA
+            value: ${var.ontobricks_registry_schema}
+          - name: WAREHOUSE_NAME
+            value: ${var.rt_warehouse_name}
+          - name: SQL_WAREHOUSE_ID
+            value_from: sql-warehouse
+          - name: PIPELINE_ID
+            value: ${var.documents_pipeline_id}
+          # Analytics pipeline, triggered on review-submit / proposal-disposition
+          # so review analytics refresh event-driven (the file-arrival path only
+          # covers document ingestion). No cron.
+          - name: ANALYTICS_PIPELINE_ID
+            value: ${var.analytics_pipeline_id}
+          - name: LLM_ENDPOINT
+            value_from: llm-endpoint
+          - name: TRANSCRIPTION_ENDPOINT
+            value_from: transcription-endpoint
+          - name: TRANSCRIPTION_ENGINE
+            value: "fm"
+          - name: LAKERCM_AGENT_APP_NAME
+            value: ${var.agent_app_name}
+          - name: AUTO_VERDICT_THRESHOLD
+            value: ${var.auto_verdict_threshold}
+          # Read-only: /api/me resolves this name to an experiment id (via the
+          # SDK, not mlflow) so each tool call in the chat transcript can deep-link
+          # to its MLflow trace. Same value the agent app traces INTO, so the link
+          # lands on the experiment that actually holds the trace.
+          - name: MLFLOW_EXPERIMENT_NAME
+            value: ${var.mlflow_experiment_path}${var.name_suffix}
+
+          # ── SP UUIDs (consumed by alembic migrations at import time) ──────
+          - name: AGENT_SP_CLIENT_ID
+            value: ${var.agent_sp_client_id}
+          - name: REVIEWER_SP_CLIENT_ID
+            value: ${var.reviewer_sp_client_id}
+
+          # Group-backed Postgres role the reviewer-app GRANTs to on startup
+          # (lakehouse_db._grant_agent_role_membership). The agent_app's
+          # connection sessions-as this role, so granting privileges to it
+          # rather than the agent SP UUID makes SP rotations a no-op at the
+          # Postgres layer.
+          - name: CHECKPOINT_ROLE_NAME
+            value: ${var.checkpoint_role_name}
+
+      # Typed app resources: value_from sources above + native SP grants
+      # (additive — the SPs already hold these via foundation/mlflow bundles).
+      resources:
+        - name: sql-warehouse
+          sql_warehouse:
+            id: ${var.rt_warehouse_id}
+            permission: CAN_USE
+        - name: llm-endpoint
+          serving_endpoint:
+            name: ${var.llm_endpoint}
+            permission: CAN_QUERY
+        - name: transcription-endpoint
+          serving_endpoint:
+            name: ${var.transcription_endpoint}
+            permission: CAN_QUERY
+
+      permissions:
+        - level: CAN_MANAGE
+          user_name: ${var.user_email}
+        - level: CAN_USE
+          group_name: users

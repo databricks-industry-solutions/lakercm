@@ -1,0 +1,42 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 2c9f875913ee60ca25ce70243dc24d5b6415598c  # frozen: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        args: ['--unsafe']
+      - id: check-added-large-files
+        args: ['--maxkb=1500']
+      - id: check-json
+        exclude: ^\.vscode/
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  - repo: https://github.com/psf/black
+    rev: c6755bb741b6481d6b3d3bb563c83fa060db96c9  # frozen: 26.3.1
+    hooks:
+      # Heads-up: pinned to a bare SHA, black derives its version from git tags,
+      # and pre-commit clones without them -- so `black --version` inside the hook
+      # env reports `0.1.dev1+gc6755bb74`, not 26.3.1. Same commit, so identical
+      # formatting; do not "fix" it by reverting to the tag. Nothing asserts the
+      # version string (no [tool.black] required-version).
+      # No language_version pin: black's output depends only on its version and
+      # pyproject.toml's target-version, and the pin breaks env creation on
+      # machines whose python3.11 is a uv-managed relocatable build.
+      - id: black
+        args: ['--line-length=88']
+        # pyproject.toml's [tool.black] extend-exclude does NOT apply here:
+        # black only honours it while recursing directories, and pre-commit
+        # hands it explicit file paths. So the alembic-migrations exclusion
+        # has to be repeated as a hook-level regex, or `pre-commit run
+        # --all-files` reformats 19 migrations that `black .` leaves alone
+        # (which fails the CI pre-commit job on an otherwise clean tree).
+        exclude: (_notebook\.py$|^pipelines/|^reviewer_app/migrations/versions/)
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 75b98813cfb7e663870a28c74366a1e99d7bfe79  # frozen: v0.6.9
+    hooks:
+      - id: ruff
+        args: ['--fix', '--unsafe-fixes', '--exit-non-zero-on-fix']
+        exclude: (_notebook\.py$|/notebooks/|/tests/evaluate_|^pipelines/)

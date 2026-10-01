@@ -1,0 +1,1160 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   ExtractionComparison — extracted-data + review panel
+   Canonical lakercm tokens (system font + warm-gray + sophisticated blue).
+   "Refined Minimalism: Sophisticated, Clean, Trustworthy."
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.comparison-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--neutral-50, #fafaf9);
+  font-family: var(--font-body, system-ui, sans-serif);
+  color: var(--color-text, #1c1917);
+}
+
+/* ── Panel header ──────────────────────────────────────────────────────────── */
+
+.ls-panel-header {
+  padding: var(--space-4, 16px) var(--space-6, 24px) var(--space-3, 12px);
+  background: var(--surface-raised);
+  border-bottom: 1px solid var(--color-border, #e7e5e4);
+  flex-shrink: 0;
+}
+
+.ls-header-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  margin-bottom: var(--space-2, 8px);
+}
+
+.ls-panel-title {
+  font-family: var(--font-display, sans-serif);
+  font-size: var(--text-lg, 18px);
+  font-weight: var(--font-semibold, 600);
+  line-height: 1.3;
+  color: var(--neutral-900, #1c1917);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.comparison-subtitle {
+  font-size: var(--text-xs, 12px);
+  color: var(--neutral-500, #78716c);
+  margin: 0;
+}
+
+.ls-field-count-badge {
+  margin-left: auto;
+  padding: 2px var(--space-2, 8px);
+  background: var(--neutral-100, #f5f5f4);
+  border: 1px solid var(--color-border, #e7e5e4);
+  border-radius: var(--radius-full, 999px);
+  font-size: var(--text-xs, 11px);
+  font-weight: var(--font-semibold, 600);
+  color: var(--neutral-700, #44403c);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Classification + confidence row */
+.ls-classification-row {
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  flex-wrap: wrap;
+}
+
+.ls-classification-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px var(--space-2, 8px);
+  background: var(--neutral-100, #f5f5f4);
+  border: 1px solid var(--color-border, #e7e5e4);
+  border-radius: var(--radius-full, 999px);
+  font-size: var(--text-xs, 12px);
+  font-weight: var(--font-medium, 500);
+  color: var(--neutral-700, #44403c);
+  text-transform: capitalize;
+  letter-spacing: 0.01em;
+}
+
+/* Classifier confidence (ai_classify v2.1) — the model's own scale, not the
+   blended extraction confidence, so deliberately quieter than the bar beside it
+   and never colour-coded against the auto-verdict threshold. Dashed border reads
+   as "informational" rather than "measured against a bar". */
+.ls-classify-confidence {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px var(--space-2, 8px);
+  border-radius: var(--radius-full, 999px);
+  background: var(--neutral-50, #fafaf9);
+  border: 1px dashed var(--color-border, #e7e5e4);
+  font-size: 11px;
+  font-weight: var(--font-medium, 500);
+  color: var(--neutral-500, #78716c);
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+  white-space: nowrap;
+}
+
+/* The grounded one-sentence rationale, under the classification row. */
+.ls-classify-rationale {
+  margin: var(--space-2, 8px) 0 0;
+  font-size: var(--text-xs, 12px);
+  line-height: 1.45;
+  color: var(--neutral-600, #57534e);
+}
+
+/* Confidence quartile bar — replaces the inline % pill. */
+.ls-confidence-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px var(--space-2, 8px);
+  border-radius: var(--radius-full, 999px);
+  background: var(--neutral-50, #fafaf9);
+  border: 1px solid var(--color-border, #e7e5e4);
+}
+
+.ls-confidence-bar .ls-conf-cell {
+  width: 4px;
+  height: 10px;
+  border-radius: 1px;
+  background: var(--neutral-200, #e7e5e4);
+  transition: background var(--transition-fast, 150ms ease);
+}
+
+.ls-confidence-bar.meets .ls-conf-cell.is-filled {
+  background: var(--primary-600, #2563eb);
+}
+
+.ls-confidence-bar.below .ls-conf-cell.is-filled {
+  background: var(--neutral-500, #78716c);
+}
+
+.ls-confidence-bar .ls-conf-value {
+  font-size: 11px;
+  font-weight: var(--font-semibold, 600);
+  color: var(--neutral-700, #44403c);
+  font-variant-numeric: tabular-nums;
+  margin-left: 2px;
+}
+
+/* Compact variant — sliver-thin indicator that fits in the field-row actions
+   column without crowding the value. Shows only the four quartile cells; the
+   percentage stays accessible via the title tooltip and the InspectorCard.
+   Below-threshold cells are amber so a low-confidence row reads at a glance
+   instead of blending into the panel chrome. */
+.ls-confidence-bar.is-compact {
+  padding: 2px 4px;
+  gap: 2px;
+  background: transparent;
+  border-color: var(--neutral-200, #e7e5e4);
+  cursor: help;
+}
+
+.ls-confidence-bar.is-compact .ls-conf-cell {
+  width: 3px;
+  height: 9px;
+}
+
+.ls-confidence-bar.is-compact .ls-conf-value {
+  display: none;
+}
+
+.ls-confidence-bar.is-compact.below .ls-conf-cell.is-filled {
+  background: var(--warning-500, #f59e0b);
+}
+
+/* Reveal the % readout only on row hover/focus or when the row is locked,
+   so reviewers can confirm the exact number when they want it without
+   blowing out the actions column on every row. */
+.ls-field-row:hover .ls-confidence-bar.is-compact .ls-conf-value,
+.ls-field-row.is-locked .ls-confidence-bar.is-compact .ls-conf-value,
+.ls-field-row:focus-within .ls-confidence-bar.is-compact .ls-conf-value {
+  display: inline;
+  font-size: 10px;
+  margin-left: 3px;
+}
+
+/* Auto-verdict banner — keeps semantic green for "approved" status */
+.auto-verdict-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2, 10px);
+  margin: 0 0 var(--space-3, 14px);
+  padding: var(--space-3, 12px);
+  background: var(--success-50, #f0fdf4);
+  border: 1px solid #86efac;
+  border-radius: var(--radius-md, 8px);
+  font-size: var(--text-xs, 12px);
+  color: #065f46;
+}
+
+.auto-verdict-icon {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--success-500, #22c55e);
+  color: #fff;
+  border-radius: var(--radius-full, 999px);
+  font-weight: var(--font-bold, 700);
+  font-size: 13px;
+}
+
+.auto-verdict-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  line-height: 1.45;
+}
+
+.auto-verdict-body strong {
+  font-weight: var(--font-bold, 700);
+  color: #064e3b;
+}
+
+/* ── Scrollable annotations body ───────────────────────────────────────────── */
+
+.ls-annotations-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4, 16px) var(--space-6, 24px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4, 16px);
+}
+
+/* Don't let the column flex container squeeze section boxes — combined with
+   the section's `overflow: hidden` (which clips the toggle bar to the
+   rounded corners) that produces silent vertical clipping. Render at
+   natural height; let .ls-annotations-body's own overflow-y: auto scroll. */
+.ls-annotations-body > .ls-section-group,
+.ls-annotations-body > .ls-rows-section {
+  flex-shrink: 0;
+}
+
+/* ── Field row (definition-list grid: label / value / actions) ─────────────
+   Stripe-Dashboard / Linear-style scannable list. Label is rendered as
+   small uppercase text in a fixed-gutter column rather than a chip; the
+   value gets the visual weight. Card chrome is dropped — only a hairline
+   bottom divider separates rows. */
+
+.ls-field-row {
+  display: grid;
+  /* minmax(0, 1fr) on the value column lets it shrink below its intrinsic
+     content size when the panel is narrow, instead of pushing the actions
+     column off-screen. Label is allowed to shrink to 80px on tight panels
+     so the value keeps a usable width. */
+  grid-template-columns: minmax(80px, 26%) minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: var(--space-3, 12px);
+  padding: var(--space-2, 8px) var(--space-3, 12px) var(--space-2, 8px)
+    var(--space-3, 12px);
+  border: none;
+  border-bottom: 1px solid var(--neutral-100, #f5f5f4);
+  border-left: 3px solid transparent;
+  background: transparent;
+  transition:
+    background var(--transition-fast, 150ms ease),
+    border-color var(--transition-fast, 150ms ease);
+}
+
+.ls-section-body > .ls-field-row:last-child,
+.ls-row-body > .ls-field-row:last-child {
+  border-bottom: none;
+}
+
+.ls-field-row:hover {
+  background: var(--primary-50, #eff6ff);
+}
+
+/* Field has >=1 attributed bbox — subtle affordance that it's linkable */
+.ls-field-row.has-attribution {
+  border-left-color: var(--primary-200, #bfdbfe);
+  cursor: pointer;
+}
+
+.ls-field-row.has-attribution:hover {
+  border-left-color: var(--primary-500, #3b82f6);
+}
+
+/* Field currently being pointed at (by mouse on the row) */
+.ls-field-row.is-hovered {
+  background: var(--primary-50, #eff6ff);
+}
+
+/* Field is a source for the bbox the user is hovering on the image.
+   Anchor with a primary-500 left rail + tinted background — no per-row box. */
+.ls-field-row.is-source-match {
+  background: var(--primary-50, #eff6ff);
+  border-left-color: var(--primary-500, #3b82f6);
+}
+
+/* Field is the source for a *locked* (selected) bbox. Slightly stronger
+   anchor than is-source-match so the active selection persists visually
+   even when the mouse leaves the row. */
+.ls-field-row.is-source-locked {
+  background: var(--primary-50, #eff6ff);
+  border-left-color: var(--primary-600, #2563eb);
+  box-shadow: inset 1px 0 0 var(--primary-300, #93c5fd);
+}
+
+/* Field row that the reviewer clicked to lock — the canonical "selected"
+   state. The locked row holds an inline detail block as its 4th grid item
+   (spans all columns). Padding adjusts to compensate for the 4px border so
+   the value text doesn't shift when the row locks. The bottom border of the
+   row is removed when locked so the detail block reads as a continuation. */
+.ls-field-row.is-locked {
+  background: var(--primary-50, #eff6ff);
+  border-left: 4px solid var(--primary-600, #2563eb);
+  border-bottom-color: transparent;
+  padding-left: calc(var(--space-3, 12px) - 1px);
+  box-shadow:
+    inset 0 0 0 1px rgba(37, 99, 235, 0.18),
+    0 1px 3px rgba(37, 99, 235, 0.08);
+}
+
+.ls-field-row.is-locked:focus-visible {
+  outline: 2px solid var(--primary-500, #3b82f6);
+  outline-offset: -2px;
+}
+
+/* Low per-field confidence (< 0.7) — amber rail so reviewers can scan the
+   panel and find what needs attention without reading every percentage.
+   Cumulative with locked: locked's blue rail wins, but the amber row keeps
+   a subtle inner glow to keep the warning visible. */
+.ls-field-row.is-low-confidence {
+  border-left-color: var(--warning-500, #f59e0b);
+}
+
+.ls-field-row.is-low-confidence:not(.is-locked):not(.is-source-match):not(.is-source-locked) {
+  background: linear-gradient(
+    90deg,
+    rgba(245, 158, 11, 0.04) 0%,
+    transparent 60%
+  );
+}
+
+.ls-field-row.is-locked.is-low-confidence {
+  box-shadow:
+    inset 0 0 0 1px rgba(245, 158, 11, 0.22),
+    0 1px 3px rgba(37, 99, 235, 0.08);
+}
+
+/* Keyboard focus ring — visible only for keyboard users (focus-visible)
+   so mouse users don't see a blue rectangle on every click-to-lock. */
+.ls-field-row[tabindex]:focus-visible {
+  outline: 2px solid var(--primary-400, #60a5fa);
+  outline-offset: -2px;
+  border-radius: 2px;
+}
+
+.ls-field-label {
+  font-family: var(--font-body, sans-serif);
+  font-size: 11px;
+  font-weight: var(--font-medium, 500);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--neutral-500, #78716c);
+  line-height: 1.6;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-top: 4px;
+}
+
+.ls-field-value {
+  font-family: var(--font-body, sans-serif);
+  font-size: var(--text-sm, 14px);
+  color: var(--neutral-900, #1c1917);
+  font-weight: var(--font-normal, 400);
+  line-height: 1.55;
+  word-break: break-word;
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+
+.ls-field-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  align-self: center;
+}
+
+/* Per-row confidence bar is always visible — it's an at-a-glance signal,
+   not a hover-only affordance. Other action chrome (copy button, edited
+   badge) still fades in on hover/focus. */
+.ls-field-actions .ls-correction-badge,
+.ls-field-actions .ls-copy-btn {
+  opacity: 0;
+  transition: opacity var(--transition-fast, 150ms ease);
+}
+
+.ls-field-row:hover .ls-field-actions .ls-correction-badge,
+.ls-field-row:hover .ls-field-actions .ls-copy-btn,
+.ls-field-row.is-corrected .ls-field-actions .ls-correction-badge,
+.ls-field-row.is-corrected .ls-field-actions .ls-copy-btn,
+.ls-field-row.is-locked .ls-field-actions .ls-correction-badge,
+.ls-field-row.is-locked .ls-field-actions .ls-copy-btn,
+.ls-field-row:focus-within .ls-field-actions .ls-correction-badge,
+.ls-field-row:focus-within .ls-field-actions .ls-copy-btn {
+  opacity: 1;
+}
+
+.ls-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--neutral-500, #78716c);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all var(--transition-fast, 150ms ease);
+}
+
+.ls-copy-btn:hover {
+  background: var(--surface-raised);
+  border-color: var(--color-border, #e7e5e4);
+  color: var(--primary-700, #1d4ed8);
+}
+
+.ls-copy-btn.is-copied {
+  color: var(--success-600, #16a34a);
+  border-color: var(--success-500, #22c55e);
+  background: var(--success-50, #f0fdf4);
+  opacity: 1;
+}
+
+.ls-empty-value {
+  color: var(--neutral-400, #a8a29e);
+  font-weight: var(--font-normal, 400);
+}
+
+/* Inline edit affordance: dashed underline on hover, becomes solid on focus.
+   Click puts the cursor in the value text — no modal, no separate edit mode. */
+.ls-field-value.is-editable {
+  cursor: text;
+  border-bottom: 1px dashed transparent;
+  transition: border-bottom-color var(--transition-fast, 150ms ease);
+  outline: none;
+  border-radius: 2px;
+  padding: 2px 4px 1px 4px;
+  margin: -2px -4px -1px -4px;
+}
+
+.ls-field-row:hover .ls-field-value.is-editable {
+  border-bottom-color: var(--primary-300, #93c5fd);
+}
+
+.ls-field-value.is-editable:focus {
+  border-bottom: 1px solid var(--primary-500, #3b82f6);
+  background: var(--surface-raised);
+}
+
+/* Field whose value the reviewer corrected — stays subtly highlighted so
+   they can see at a glance which fields are edited before submit. */
+.ls-field-row.is-corrected {
+  background: rgba(37, 99, 235, 0.04);
+}
+
+.ls-field-row.is-corrected .ls-field-value.is-editable {
+  border-bottom-color: var(--primary-500, #3b82f6);
+  border-bottom-style: solid;
+}
+
+.ls-correction-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: var(--font-bold, 700);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary-700, #1d4ed8);
+  background: var(--primary-50, #eff6ff);
+  border: 1px solid var(--primary-200, #bfdbfe);
+  border-radius: var(--radius-sm, 4px);
+  white-space: nowrap;
+}
+
+/* ── Collapsible section group ─────────────────────────────────────────────── */
+
+.ls-section-group {
+  background: var(--surface-raised);
+  border: 1px solid var(--color-border, #e7e5e4);
+  border-radius: var(--radius-lg, 12px);
+  overflow: hidden;
+  box-shadow: var(--shadow-xs, 0 1px 2px rgba(0, 0, 0, 0.04));
+}
+
+.ls-section-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  background: var(--neutral-50, #fafaf9);
+  border: none;
+  border-bottom: 1px solid var(--color-border, #e7e5e4);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background var(--transition-fast, 150ms ease);
+}
+
+.ls-section-toggle:hover {
+  background: var(--neutral-100, #f5f5f4);
+}
+
+.ls-section-chevron {
+  font-size: 10px;
+  color: var(--neutral-500, #78716c);
+  width: 12px;
+  flex-shrink: 0;
+}
+
+.ls-section-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.ls-section-label {
+  font-family: var(--font-display, sans-serif);
+  font-size: var(--text-xs, 12px);
+  font-weight: var(--font-bold, 700);
+  color: var(--neutral-800, #292524);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex: 1;
+}
+
+.ls-section-count {
+  font-size: var(--text-xs, 11px);
+  font-weight: var(--font-semibold, 600);
+  color: var(--neutral-700, #44403c);
+  background: var(--neutral-200, #e7e5e4);
+  padding: 1px var(--space-2, 8px);
+  border-radius: var(--radius-full, 999px);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.ls-section-body {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ── Rows section ──────────────────────────────────────────────────────────── */
+
+.ls-rows-section {
+  background: var(--surface-raised);
+  border: 1px solid var(--color-border, #e7e5e4);
+  border-radius: var(--radius-lg, 12px);
+  overflow: hidden;
+  box-shadow: var(--shadow-xs, 0 1px 2px rgba(0, 0, 0, 0.04));
+}
+
+.ls-rows-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  padding: var(--space-3, 12px) var(--space-4, 16px);
+  background: var(--neutral-50, #fafaf9);
+  border-bottom: 1px solid var(--color-border, #e7e5e4);
+}
+
+.ls-rows-title {
+  font-family: var(--font-display, sans-serif);
+  font-size: var(--text-xs, 12px);
+  font-weight: var(--font-bold, 700);
+  color: var(--neutral-800, #292524);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex: 1;
+}
+
+.ls-rows-list {
+  padding: var(--space-3, 12px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 10px);
+}
+
+/* ── Row card ──────────────────────────────────────────────────────────────── */
+
+.ls-row-card {
+  border: 1px solid var(--color-border, #e7e5e4);
+  border-radius: var(--radius-md, 8px);
+  overflow: hidden;
+  background: var(--neutral-50, #fafaf9);
+  transition:
+    border-color var(--transition-fast, 150ms ease),
+    box-shadow var(--transition-fast, 150ms ease);
+}
+
+.ls-row-card:hover {
+  border-color: var(--primary-200, #bfdbfe);
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.06));
+}
+
+.ls-row-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  padding: var(--space-2, 9px) var(--space-3, 12px);
+  background: var(--neutral-100, #f5f5f4);
+  border: none;
+  border-bottom: 1px solid var(--color-border, #e7e5e4);
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background var(--transition-fast, 150ms ease);
+}
+
+.ls-row-toggle:hover {
+  background: var(--neutral-200, #e7e5e4);
+}
+
+.ls-row-num {
+  font-size: 11px;
+  font-weight: var(--font-bold, 700);
+  color: var(--primary-700, #1d4ed8);
+  background: var(--primary-50, #eff6ff);
+  border: 1px solid var(--primary-200, #bfdbfe);
+  border-radius: var(--radius-full, 999px);
+  padding: 1px var(--space-2, 8px);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.ls-row-summary {
+  font-family: var(--font-body, sans-serif);
+  font-size: var(--text-sm, 13px);
+  font-weight: var(--font-semibold, 600);
+  color: var(--neutral-900, #1c1917);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ls-row-body {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ── Empty / loading states ────────────────────────────────────────────────── */
+
+.comparison-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-12, 48px) var(--space-6, 24px);
+  text-align: center;
+}
+
+.comparison-empty-state .empty-icon {
+  font-size: 48px;
+  opacity: 0.45;
+  margin-bottom: var(--space-3, 14px);
+}
+
+.comparison-empty-state .empty-title {
+  font-family: var(--font-display, sans-serif);
+  font-size: var(--text-lg, 17px);
+  font-weight: var(--font-semibold, 600);
+  color: var(--neutral-700, #44403c);
+  margin: 0 0 6px 0;
+}
+
+.comparison-empty-state .empty-subtitle {
+  font-size: var(--text-sm, 13px);
+  color: var(--neutral-500, #78716c);
+  margin: 0 0 var(--space-4, 16px) 0;
+  max-width: 280px;
+}
+
+.btn-retry {
+  padding: 7px 18px;
+  border: 1px solid var(--primary-400, #60a5fa);
+  border-radius: var(--radius-md, 8px);
+  background: var(--surface-raised);
+  color: var(--primary-700, #1d4ed8);
+  font-family: var(--font-body, sans-serif);
+  font-size: var(--text-sm, 13px);
+  font-weight: var(--font-medium, 500);
+  cursor: pointer;
+  transition: all var(--transition-fast, 150ms ease);
+}
+
+.btn-retry:hover {
+  background: var(--primary-50, #eff6ff);
+}
+
+.comparison-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-12, 48px) var(--space-6, 24px);
+  gap: var(--space-3, 14px);
+  color: var(--neutral-500, #78716c);
+  font-size: var(--text-sm, 13px);
+}
+
+.comparison-loading .loading-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--neutral-200, #e7e5e4);
+  border-top-color: var(--primary-600, #2563eb);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Human review section ──────────────────────────────────────────────────── */
+
+.review-section {
+  border-top: 1px solid var(--color-border, #e7e5e4);
+  padding: var(--space-4, 16px) var(--space-6, 24px);
+  background: var(--surface-raised);
+  flex-shrink: 0;
+}
+
+.review-header {
+  margin-bottom: var(--space-3, 12px);
+}
+
+.review-title {
+  font-family: var(--font-display, sans-serif);
+  font-size: var(--text-base, 14px);
+  font-weight: var(--font-bold, 700);
+  color: var(--neutral-900, #1c1917);
+  margin: 0 0 2px 0;
+  letter-spacing: -0.01em;
+}
+
+.review-subtitle {
+  font-size: var(--text-xs, 12px);
+  color: var(--neutral-500, #78716c);
+  margin: 0;
+}
+
+.review-verdict-group {
+  display: flex;
+  gap: var(--space-2, 8px);
+  margin-bottom: var(--space-3, 12px);
+  flex-wrap: wrap;
+}
+
+.review-radio-option {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px var(--space-3, 12px);
+  border: 1.5px solid var(--color-border, #e7e5e4);
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+  font-family: var(--font-body, sans-serif);
+  font-size: var(--text-xs, 12px);
+  font-weight: var(--font-semibold, 600);
+  color: var(--neutral-600, #57534e);
+  transition: all var(--transition-fast, 150ms ease);
+  user-select: none;
+  background: var(--surface-raised);
+}
+
+.review-radio-option input[type='radio'] {
+  display: none;
+}
+
+.verdict-icon {
+  font-size: 12px;
+  font-weight: var(--font-bold, 700);
+}
+
+.review-radio-option:hover {
+  border-color: var(--neutral-400, #a8a29e);
+  background: var(--neutral-50, #fafaf9);
+}
+
+.review-radio-option.selected[data-verdict='correct'] {
+  border-color: var(--success-500, #22c55e);
+  background: var(--success-50, #f0fdf4);
+  color: #065f46;
+}
+
+.review-radio-option.selected[data-verdict='partially_correct'] {
+  border-color: var(--warning-500, #f59e0b);
+  background: var(--warning-50, #fffbeb);
+  color: #92400e;
+}
+
+.review-radio-option.selected[data-verdict='incorrect'] {
+  border-color: var(--error-500, #ef4444);
+  background: var(--error-50, #fef2f2);
+  color: #991b1b;
+}
+
+.review-reasoning {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1.5px solid var(--color-border, #e7e5e4);
+  border-radius: var(--radius-md, 8px);
+  font-family: var(--font-body, sans-serif);
+  font-size: var(--text-sm, 13px);
+  color: var(--neutral-800, #292524);
+  resize: vertical;
+  margin-bottom: var(--space-3, 10px);
+  box-sizing: border-box;
+  background: var(--neutral-50, #fafaf9);
+  transition:
+    border-color var(--transition-fast, 150ms ease),
+    box-shadow var(--transition-fast, 150ms ease),
+    background var(--transition-fast, 150ms ease);
+}
+
+.review-reasoning:focus {
+  outline: none;
+  border-color: var(--primary-500, #3b82f6);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+  background: var(--surface-raised);
+}
+
+.review-reasoning::placeholder {
+  color: var(--neutral-400, #a8a29e);
+}
+
+.review-error {
+  font-size: var(--text-xs, 12px);
+  color: #dc2626;
+  margin: 0 0 9px 0;
+}
+
+.review-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3, 10px);
+}
+
+.review-submit-btn {
+  padding: 8px 20px;
+  border: none;
+  border-radius: var(--radius-md, 8px);
+  background: var(--primary-600, #2563eb);
+  color: white;
+  font-family: var(--font-body, sans-serif);
+  font-size: var(--text-sm, 13px);
+  font-weight: var(--font-semibold, 600);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast, 150ms ease),
+    box-shadow var(--transition-fast, 150ms ease);
+  letter-spacing: 0.01em;
+}
+
+.review-submit-btn:hover:not(:disabled) {
+  background: var(--primary-700, #1d4ed8);
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.1));
+}
+
+.review-submit-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.review-saved-badge {
+  font-size: var(--text-xs, 12px);
+  font-weight: var(--font-bold, 700);
+  color: var(--success-600, #16a34a);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* Draft autosave state. Deliberately quiet: this fires on every typing pause,
+   so it must never pull the eye the way the unsaved-edits pill does. Reserves
+   its own width so the actions row does not reflow as the text changes. */
+.review-draft-status {
+  font-size: var(--text-xs, 12px);
+  color: var(--gray-500, #6b7280);
+  min-width: 84px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.review-draft-status--saved {
+  color: var(--success-600, #16a34a);
+}
+
+/* The one state that has to be noticed: the reviewer believes their work is
+   safe and it is not. */
+.review-draft-status--error {
+  color: var(--danger-600, #dc2626);
+  font-weight: var(--font-semibold, 600);
+}
+
+/* Local-only edits indicator. Amber matches the "Partially Correct" verdict
+   pill so the warning palette stays consistent. Slow pulse on the dot to
+   read as "active state" without nagging. */
+.review-unsaved-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--warning-50, #fffbeb);
+  border: 1px solid var(--warning-500, #f59e0b);
+  border-radius: var(--radius-full, 999px);
+  font-family: var(--font-body, sans-serif);
+  font-size: var(--text-xs, 12px);
+  font-weight: var(--font-semibold, 600);
+  color: #92400e;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.review-unsaved-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning-500, #f59e0b);
+  animation: unsavedDotPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes unsavedDotPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+/* ── Responsive ────────────────────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .ls-panel-header {
+    padding: var(--space-3, 12px) var(--space-4, 16px);
+  }
+
+  .ls-annotations-body {
+    padding: var(--space-3, 12px) var(--space-4, 16px);
+    gap: var(--space-3, 12px);
+  }
+
+  .review-verdict-group {
+    flex-direction: column;
+  }
+
+  .review-section {
+    padding: var(--space-3, 12px) var(--space-4, 16px);
+  }
+}
+
+/* ── Inline field detail (locked row expansion) ─────────────────────────────
+   Sits as the 4th child of the .ls-field-row grid (which has 3 explicit
+   columns), spanning all three. Replaces the floating InspectorCard with an
+   in-place detail surface that never overlaps the document image and never
+   transitions in/out on hover (visibility is driven by `selectedField`). */
+
+.ls-inline-detail {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  margin: var(--space-2, 8px) calc(var(--space-3, 12px) * -1) calc(var(--space-2, 8px) * -1);
+  padding: var(--space-3, 12px) var(--space-4, 16px) var(--space-3, 12px);
+  background: rgba(255, 255, 255, 0.65);
+  border-top: 1px dashed var(--primary-200, #bfdbfe);
+}
+
+.ls-inline-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+}
+
+.ls-inline-detail-eyebrow {
+  font-family: var(--font-display, sans-serif);
+  font-size: 10px;
+  font-weight: var(--font-bold, 700);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary-700, #1d4ed8);
+}
+
+.ls-inline-detail-unpin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--primary-200, #bfdbfe);
+  border-radius: var(--radius-full, 999px);
+  background: var(--primary-50, #eff6ff);
+  color: var(--primary-700, #1d4ed8);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast, 150ms ease),
+    border-color var(--transition-fast, 150ms ease),
+    transform var(--transition-fast, 150ms ease);
+}
+
+.ls-inline-detail-unpin:hover {
+  background: var(--primary-100, #dbeafe);
+  border-color: var(--primary-400, #60a5fa);
+}
+
+.ls-inline-detail-unpin:active {
+  transform: scale(0.94);
+}
+
+/* Value block — visually similar to the InspectorCard's value block, but
+   inline so it doesn't compete with the document. */
+.ls-inline-detail-value {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3, 12px);
+  padding: var(--space-3, 10px) var(--space-3, 12px);
+  background: var(--surface-raised);
+  border: 1px solid var(--color-border, #e7e5e4);
+  border-radius: var(--radius-md, 8px);
+}
+
+.ls-inline-detail-value-text {
+  margin: 0;
+  font-size: var(--text-sm, 14px);
+  font-weight: var(--font-semibold, 600);
+  line-height: 1.45;
+  color: var(--neutral-900, #1c1917);
+  word-break: break-word;
+  font-variant-numeric: tabular-nums;
+  flex: 1;
+  min-width: 0;
+}
+
+.ls-inline-detail-empty {
+  color: var(--neutral-400, #a8a29e);
+  font-weight: var(--font-normal, 400);
+  font-style: italic;
+}
+
+.ls-inline-detail-copy {
+  flex-shrink: 0;
+  padding: 4px var(--space-2, 8px);
+  border: 1px solid var(--color-border, #e7e5e4);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--neutral-50, #fafaf9);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: var(--font-semibold, 600);
+  color: var(--neutral-700, #44403c);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast, 150ms ease),
+    border-color var(--transition-fast, 150ms ease),
+    color var(--transition-fast, 150ms ease);
+}
+
+.ls-inline-detail-copy:hover {
+  background: var(--primary-50, #eff6ff);
+  border-color: var(--primary-300, #93c5fd);
+  color: var(--primary-700, #1d4ed8);
+}
+
+.ls-inline-detail-copy.is-copied {
+  background: var(--success-50, #f0fdf4);
+  border-color: var(--success-500, #22c55e);
+  color: var(--success-600, #16a34a);
+}
+
+/* Meta row — confidence bar + chips */
+.ls-inline-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2, 8px);
+}
+
+.ls-inline-detail-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px var(--space-2, 8px);
+  background: var(--neutral-100, #f5f5f4);
+  border: 1px solid var(--color-border, #e7e5e4);
+  border-radius: var(--radius-full, 999px);
+  font-size: 11px;
+  font-weight: var(--font-semibold, 600);
+  color: var(--neutral-700, #44403c);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  text-transform: lowercase;
+  letter-spacing: 0.01em;
+}
+
+.ls-inline-detail-chip.is-warn {
+  background: var(--warning-50, #fffbeb);
+  border-color: #fcd34d;
+  color: #92400e;
+}
+
+/* Action button — Scroll to source */
+.ls-inline-detail-action {
+  align-self: flex-start;
+  padding: 7px var(--space-3, 12px);
+  border: 1px solid var(--primary-200, #bfdbfe);
+  border-radius: var(--radius-md, 8px);
+  background: var(--primary-50, #eff6ff);
+  color: var(--primary-700, #1d4ed8);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: var(--font-semibold, 600);
+  cursor: pointer;
+  transition:
+    background var(--transition-fast, 150ms ease),
+    border-color var(--transition-fast, 150ms ease),
+    transform var(--transition-fast, 150ms ease);
+}
+
+.ls-inline-detail-action:hover {
+  background: var(--primary-100, #dbeafe);
+  border-color: var(--primary-400, #60a5fa);
+}
+
+.ls-inline-detail-action:active {
+  transform: scale(0.98);
+}
+
+/* Held-for-review counterpart to .auto-verdict-banner. Same shape, different
+   meaning: the pipeline deliberately did NOT auto-verify this document, so the
+   banner has to read as an instruction rather than as a reassurance. */
+.auto-verdict-banner.needs-review {
+  background: var(--warning-bg, #fff8e1);
+  border-color: var(--warning-border, #f0c36d);
+}
+
+.auto-verdict-banner.needs-review .auto-verdict-icon {
+  background: var(--warning-border, #f0c36d);
+  color: #4a3500;
+}
