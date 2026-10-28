@@ -1,5 +1,5 @@
 # Linting — pinned to match .pre-commit-config.yaml so local + CI + hooks agree.
-black==26.3.1
+black==26.10.1
 ruff==0.6.9
 
 # Tests
