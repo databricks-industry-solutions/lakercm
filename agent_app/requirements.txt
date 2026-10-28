@@ -32,7 +32,7 @@ langgraph==1.2.11
 # AG-UI path's post_model_hook (surfaces trace_id into state) guaranteed.
 # Do not downgrade below 0.6.0.
 langgraph-prebuilt==1.1.0
-langgraph-checkpoint-postgres==3.1.2
+langgraph-checkpoint-postgres==3.1.3
 langchain-core==1.6.2
 langchain-openai==1.6.0
 mlflow[databricks]==3.16.0
