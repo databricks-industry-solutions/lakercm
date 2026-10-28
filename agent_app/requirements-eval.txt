@@ -44,7 +44,7 @@ langchain-openai>=0.3.0
 # killed the None-trace backfill patch. eval/gepa_reflection.
 # patch_harness_none_trace_guard now targets BOTH shapes and returns False
 # (loudly) if neither is present.
-mlflow[databricks]>=3.16.0
+mlflow[databricks]>=3.17.2
 databricks-agents>=0.16.0
 httpx>=0.25.0
 # GEPA optimizer backend for mlflow.genai.optimize_prompts (GepaPromptOptimizer).
